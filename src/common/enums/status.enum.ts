@@ -38,6 +38,9 @@ export enum ConflictStatus {
   RESOLVED = 'resolved',
   ESCALATED = 'escalated',
   CLOSED = 'closed',
+  REPORTED = 'REPORTED',
+  INVESTIGATING = 'INVESTIGATING',
+  MEDIATING = 'MEDIATING',
 }
 
 export enum PermitStatus {

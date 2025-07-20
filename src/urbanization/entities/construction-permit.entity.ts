@@ -82,3 +82,5 @@ export class ConstructionPermit {
   @ManyToOne(() => LandRecord)
   land: LandRecord;
 }
+export { PermitStatus };
+

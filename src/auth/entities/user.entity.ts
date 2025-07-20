@@ -71,3 +71,5 @@ export class User {
   @OneToMany(() => Conflict, (conflict) => conflict.complainant)
   conflicts: Conflict[];
 }
+export { UserRole };
+

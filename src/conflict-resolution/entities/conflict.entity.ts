@@ -5,13 +5,15 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { User } from '../../auth/entities/user.entity';
 import { LandRecord } from '../../land-registration/entities/land-record.entity';
-import { ConflictStatus } from '../../common/enums/status.enum';
+import { ConflictType, ConflictPriority, ConflictStatus } from '../enums/conflict.enum';
 
 @Entity('conflicts')
 export class Conflict {
+  [x: string]: any;
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -26,28 +28,44 @@ export class Conflict {
 
   @Column({
     type: 'enum',
+    enum: ConflictType,
+  })
+  conflictType: ConflictType;
+
+  @Column({
+    type: 'enum',
+    enum: ConflictPriority,
+    default: ConflictPriority.MEDIUM,
+  })
+  priority: ConflictPriority;
+
+  @Column({
+    type: 'enum',
     enum: ConflictStatus,
-    default: ConflictStatus.SUBMITTED,
+    default: ConflictStatus.REPORTED,
   })
   status: ConflictStatus;
 
   @Column('text', { nullable: true })
-  evidence: string; // JSON array of evidence URLs
+  evidence: string;
 
   @Column({ nullable: true })
-  mediatorId: string;
-
-  @Column({ nullable: true })
-  mediationDate: Date;
+  involvedParties: string;
 
   @Column('text', { nullable: true })
-  resolution: string;
+  resolutionNotes: string;
+
+  @Column({ nullable: true })
+  assignmentNotes: string;
+
+  @Column()
+  reportedAt: Date;
+
+  @Column({ nullable: true })
+  assignedAt: Date;
 
   @Column({ nullable: true })
   resolvedAt: Date;
-
-  @Column({ nullable: true })
-  resolvedBy: string;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -55,9 +73,22 @@ export class Conflict {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @ManyToOne(() => User, (user) => user.conflicts)
-  complainant: User;
+  // Relationships
+  @ManyToOne(() => User, { eager: true })
+  @JoinColumn({ name: 'reportedById' })
+  reportedBy: User;
 
-  @ManyToOne(() => LandRecord, { nullable: true })
-  relatedLand: LandRecord;
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'assignedToId' })
+  assignedTo: User;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'resolvedById' })
+  resolvedBy: User;
+
+  @ManyToOne(() => LandRecord, { eager: true })
+  @JoinColumn({ name: 'landRecordId' })
+  landRecord: LandRecord;
 }
+
+export { ConflictType, ConflictPriority, ConflictStatus };

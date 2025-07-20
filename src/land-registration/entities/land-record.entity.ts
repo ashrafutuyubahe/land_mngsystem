@@ -97,4 +97,5 @@ export class LandRecord {
 
   @OneToMany(() => LandTax, (tax) => tax.land)
   taxes: LandTax[];
+  ownerId: string;
 }

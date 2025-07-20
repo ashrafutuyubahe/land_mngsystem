@@ -8,4 +8,5 @@ export enum UserRole {
   URBAN_PLANNER = 'urban_planner',
   CONFLICT_MEDIATOR = 'conflict_mediator',
   SUPER_ADMIN = 'super_admin',
+  SYSTEM_ADMIN = 'SYSTEM_ADMIN',
 }

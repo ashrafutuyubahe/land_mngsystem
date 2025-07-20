@@ -5,6 +5,8 @@ import {
   MinLength,
   IsOptional,
   IsEnum,
+  Length,
+  Matches,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../enums/user-role.enum';
@@ -30,14 +32,27 @@ export class CreateUserDto {
   @IsNotEmpty()
   lastName: string;
 
-  @ApiProperty({ example: '+250788123456', required: false })
+  @ApiProperty({
+    example: '+250788123456',
+    description: 'Rwanda phone number format',
+    required: false,
+  })
   @IsOptional()
   @IsString()
+  @Matches(/^\+250[0-9]{9}$/, {
+    message: 'Phone number must be in Rwanda format (+250xxxxxxxxx)',
+  })
   phoneNumber?: string;
 
-  @ApiProperty({ example: '1234567890123456', required: false })
+  @ApiProperty({
+    example: '1199780123456789',
+    description: 'Rwanda National ID (16 digits)',
+    required: false,
+  })
   @IsOptional()
   @IsString()
+  @Length(16, 16, { message: 'National ID must be exactly 16 digits' })
+  @Matches(/^[0-9]{16}$/, { message: 'National ID must contain only numbers' })
   nationalId?: string;
 
   @ApiProperty({ enum: UserRole, default: UserRole.CITIZEN, required: false })

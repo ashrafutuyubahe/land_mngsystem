@@ -9,7 +9,11 @@ import {
 } from 'typeorm';
 import { User } from '../../auth/entities/user.entity';
 import { LandRecord } from '../../land-registration/entities/land-record.entity';
-import { ConflictType, ConflictPriority, ConflictStatus } from '../enums/conflict.enum';
+import {
+  ConflictType,
+  ConflictPriority,
+  ConflictStatus,
+} from '../enums/conflict.enum';
 
 @Entity('conflicts')
 export class Conflict {

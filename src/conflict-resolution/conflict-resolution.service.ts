@@ -356,7 +356,7 @@ export class ConflictResolutionService {
 
   private async generateCaseNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.conflictRepository.count() + 1;
+    const count = (await this.conflictRepository.count()) + 1;
     return `CON-${year}-${count.toString().padStart(4, '0')}`;
   }
 }

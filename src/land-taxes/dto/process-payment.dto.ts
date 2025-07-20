@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsNumber, Min, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  Min,
+  IsOptional,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ProcessPaymentDto {
@@ -7,7 +13,10 @@ export class ProcessPaymentDto {
   @Min(0)
   paidAmount: number;
 
-  @ApiProperty({ example: 'PAY-2024-001', description: 'Payment reference number' })
+  @ApiProperty({
+    example: 'PAY-2024-001',
+    description: 'Payment reference number',
+  })
   @IsString()
   @IsNotEmpty()
   paymentReference: string;

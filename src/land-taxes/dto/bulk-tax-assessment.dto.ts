@@ -8,18 +8,30 @@ export class BulkTaxAssessmentDto {
   @Max(2030)
   taxYear: number;
 
-  @ApiProperty({ example: 0.005, description: 'Default tax rate (0.5% = 0.005)', required: false })
+  @ApiProperty({
+    example: 0.005,
+    description: 'Default tax rate (0.5% = 0.005)',
+    required: false,
+  })
   @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(1)
   defaultTaxRate?: number;
 
-  @ApiProperty({ example: 'Kigali', description: 'District to assess (leave empty for all)', required: false })
+  @ApiProperty({
+    example: 'Kigali',
+    description: 'District to assess (leave empty for all)',
+    required: false,
+  })
   @IsOptional()
   district?: string;
 
-  @ApiProperty({ example: 'Nyarugenge', description: 'Sector to assess', required: false })
+  @ApiProperty({
+    example: 'Nyarugenge',
+    description: 'Sector to assess',
+    required: false,
+  })
   @IsOptional()
   sector?: string;
 }

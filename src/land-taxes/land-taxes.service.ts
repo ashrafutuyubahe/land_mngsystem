@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, In } from 'typeorm';
 import { LandTax } from './entities/land-tax.entity';
@@ -23,10 +28,22 @@ export class LandTaxesService {
     private landRepository: Repository<LandRecord>,
   ) {}
 
-  async create(createLandTaxDto: CreateLandTaxDto, user: User): Promise<LandTax> {
+  async create(
+    createLandTaxDto: CreateLandTaxDto,
+    user: User,
+  ): Promise<LandTax> {
     // Only authorized personnel can create tax assessments
-    if (![UserRole.TAX_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.REGISTRAR, UserRole.SUPER_ADMIN].includes(user.role)) {
-      throw new ForbiddenException('Insufficient permissions to create tax assessments');
+    if (
+      ![
+        UserRole.TAX_OFFICER,
+        UserRole.DISTRICT_ADMIN,
+        UserRole.REGISTRAR,
+        UserRole.SUPER_ADMIN,
+      ].includes(user.role)
+    ) {
+      throw new ForbiddenException(
+        'Insufficient permissions to create tax assessments',
+      );
     }
 
     const { landId, taxRate, dueDate, ...taxData } = createLandTaxDto;
@@ -42,10 +59,12 @@ export class LandTaxesService {
 
     // Check if tax already exists for this land and year
     const existingTax = await this.taxRepository.findOne({
-      where: { land: { id: landId }, taxYear: taxData.taxYear }
+      where: { land: { id: landId }, taxYear: taxData.taxYear },
     });
     if (existingTax) {
-      throw new BadRequestException(`Tax assessment already exists for ${taxData.taxYear}`);
+      throw new BadRequestException(
+        `Tax assessment already exists for ${taxData.taxYear}`,
+      );
     }
 
     // Calculate tax amount
@@ -53,7 +72,9 @@ export class LandTaxesService {
     const taxAmount = taxData.assessedValue * finalTaxRate;
 
     // Set due date (default: end of tax year)
-    const finalDueDate = dueDate ? new Date(dueDate) : new Date(taxData.taxYear, 11, 31);
+    const finalDueDate = dueDate
+      ? new Date(dueDate)
+      : new Date(taxData.taxYear, 11, 31);
 
     const tax = this.taxRepository.create({
       ...taxData,
@@ -67,8 +88,13 @@ export class LandTaxesService {
     return this.taxRepository.save(tax);
   }
 
-  async findAll(user: User, year?: number, status?: TaxStatus): Promise<LandTax[]> {
-    const query = this.taxRepository.createQueryBuilder('tax')
+  async findAll(
+    user: User,
+    year?: number,
+    status?: TaxStatus,
+  ): Promise<LandTax[]> {
+    const query = this.taxRepository
+      .createQueryBuilder('tax')
       .leftJoinAndSelect('tax.land', 'land')
       .leftJoinAndSelect('land.owner', 'owner');
 
@@ -83,7 +109,10 @@ export class LandTaxesService {
     // Apply user-based filtering
     if (user.role === UserRole.CITIZEN) {
       query.andWhere('owner.id = :userId', { userId: user.id });
-    } else if (user.role === UserRole.TAX_OFFICER || user.role === UserRole.LAND_OFFICER) {
+    } else if (
+      user.role === UserRole.TAX_OFFICER ||
+      user.role === UserRole.LAND_OFFICER
+    ) {
       query.andWhere('land.district = :district', { district: user.district });
     }
     // Admins can see all
@@ -106,8 +135,11 @@ export class LandTaxesService {
       throw new ForbiddenException('Access denied');
     }
 
-    if ((user.role === UserRole.TAX_OFFICER || user.role === UserRole.LAND_OFFICER) && 
-        tax.land.district !== user.district) {
+    if (
+      (user.role === UserRole.TAX_OFFICER ||
+        user.role === UserRole.LAND_OFFICER) &&
+      tax.land.district !== user.district
+    ) {
       throw new ForbiddenException('Access denied');
     }
 
@@ -117,10 +149,23 @@ export class LandTaxesService {
     return tax;
   }
 
-  async update(id: string, updateLandTaxDto: UpdateLandTaxDto, user: User): Promise<LandTax> {
+  async update(
+    id: string,
+    updateLandTaxDto: UpdateLandTaxDto,
+    user: User,
+  ): Promise<LandTax> {
     // Only authorized personnel can update tax assessments
-    if (![UserRole.TAX_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.REGISTRAR, UserRole.SUPER_ADMIN].includes(user.role)) {
-      throw new ForbiddenException('Insufficient permissions to update tax assessments');
+    if (
+      ![
+        UserRole.TAX_OFFICER,
+        UserRole.DISTRICT_ADMIN,
+        UserRole.REGISTRAR,
+        UserRole.SUPER_ADMIN,
+      ].includes(user.role)
+    ) {
+      throw new ForbiddenException(
+        'Insufficient permissions to update tax assessments',
+      );
     }
 
     const tax = await this.findOne(id, user);
@@ -136,7 +181,11 @@ export class LandTaxesService {
     return this.taxRepository.save(tax);
   }
 
-  async processPayment(id: string, paymentDto: ProcessPaymentDto, user: User): Promise<LandTax> {
+  async processPayment(
+    id: string,
+    paymentDto: ProcessPaymentDto,
+    user: User,
+  ): Promise<LandTax> {
     const tax = await this.findOne(id, user);
 
     // Update payment information
@@ -155,24 +204,41 @@ export class LandTaxesService {
 
     // Add payment notes
     if (paymentDto.notes) {
-      tax.notes = tax.notes ? `${tax.notes}\n${paymentDto.notes}` : paymentDto.notes;
+      tax.notes = tax.notes
+        ? `${tax.notes}\n${paymentDto.notes}`
+        : paymentDto.notes;
     }
 
     return this.taxRepository.save(tax);
   }
 
-  async bulkAssessment(bulkDto: BulkTaxAssessmentDto, user: User): Promise<{ created: number; errors: string[] }> {
+  async bulkAssessment(
+    bulkDto: BulkTaxAssessmentDto,
+    user: User,
+  ): Promise<{ created: number; errors: string[] }> {
     // Only authorized personnel can perform bulk assessments
-    if (![UserRole.TAX_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.REGISTRAR, UserRole.SUPER_ADMIN].includes(user.role)) {
-      throw new ForbiddenException('Insufficient permissions for bulk tax assessment');
+    if (
+      ![
+        UserRole.TAX_OFFICER,
+        UserRole.DISTRICT_ADMIN,
+        UserRole.REGISTRAR,
+        UserRole.SUPER_ADMIN,
+      ].includes(user.role)
+    ) {
+      throw new ForbiddenException(
+        'Insufficient permissions for bulk tax assessment',
+      );
     }
 
     const { taxYear, defaultTaxRate, district, sector } = bulkDto;
 
     // Find eligible land records
-    const query = this.landRepository.createQueryBuilder('land')
+    const query = this.landRepository
+      .createQueryBuilder('land')
       .leftJoinAndSelect('land.owner', 'owner')
-      .where('land.status IN (:...statuses)', { statuses: ['approved', 'active', 'transferred'] });
+      .where('land.status IN (:...statuses)', {
+        statuses: ['approved', 'active', 'transferred'],
+      });
 
     if (district) {
       query.andWhere('land.district = :district', { district });
@@ -191,11 +257,13 @@ export class LandTaxesService {
       try {
         // Check if tax already exists
         const existingTax = await this.taxRepository.findOne({
-          where: { land: { id: land.id }, taxYear }
+          where: { land: { id: land.id }, taxYear },
         });
 
         if (existingTax) {
-          errors.push(`Tax already exists for land ${land.parcelNumber} (${taxYear})`);
+          errors.push(
+            `Tax already exists for land ${land.parcelNumber} (${taxYear})`,
+          );
           continue;
         }
 
@@ -223,7 +291,9 @@ export class LandTaxesService {
         await this.taxRepository.save(tax);
         created++;
       } catch (error) {
-        errors.push(`Error creating tax for land ${land.parcelNumber}: ${error.message}`);
+        errors.push(
+          `Error creating tax for land ${land.parcelNumber}: ${error.message}`,
+        );
       }
     }
 
@@ -231,16 +301,22 @@ export class LandTaxesService {
   }
 
   async getOverdueTaxes(user: User): Promise<LandTax[]> {
-    const query = this.taxRepository.createQueryBuilder('tax')
+    const query = this.taxRepository
+      .createQueryBuilder('tax')
       .leftJoinAndSelect('tax.land', 'land')
       .leftJoinAndSelect('land.owner', 'owner')
       .where('tax.dueDate < :now', { now: new Date() })
-      .andWhere('tax.status IN (:...statuses)', { statuses: [TaxStatus.PENDING, TaxStatus.PARTIAL] });
+      .andWhere('tax.status IN (:...statuses)', {
+        statuses: [TaxStatus.PENDING, TaxStatus.PARTIAL],
+      });
 
     // Apply user-based filtering
     if (user.role === UserRole.CITIZEN) {
       query.andWhere('owner.id = :userId', { userId: user.id });
-    } else if (user.role === UserRole.TAX_OFFICER || user.role === UserRole.LAND_OFFICER) {
+    } else if (
+      user.role === UserRole.TAX_OFFICER ||
+      user.role === UserRole.LAND_OFFICER
+    ) {
       query.andWhere('land.district = :district', { district: user.district });
     }
 
@@ -255,7 +331,8 @@ export class LandTaxesService {
   }
 
   async getTaxStatistics(user: User, year?: number): Promise<any> {
-    const query = this.taxRepository.createQueryBuilder('tax')
+    const query = this.taxRepository
+      .createQueryBuilder('tax')
       .leftJoin('tax.land', 'land');
 
     if (year) {
@@ -265,28 +342,36 @@ export class LandTaxesService {
     // Apply user-based filtering
     if (user.role === UserRole.CITIZEN) {
       query.andWhere('land.owner.id = :userId', { userId: user.id });
-    } else if (user.role === UserRole.TAX_OFFICER || user.role === UserRole.LAND_OFFICER) {
+    } else if (
+      user.role === UserRole.TAX_OFFICER ||
+      user.role === UserRole.LAND_OFFICER
+    ) {
       query.andWhere('land.district = :district', { district: user.district });
     }
 
-    const [
-      total,
-      pending,
-      paid,
-      overdue,
-      partial,
-      exempted,
-    ] = await Promise.all([
-      query.getCount(),
-      query.andWhere('tax.status = :status', { status: TaxStatus.PENDING }).getCount(),
-      query.andWhere('tax.status = :status', { status: TaxStatus.PAID }).getCount(),
-      query.andWhere('tax.status = :status', { status: TaxStatus.OVERDUE }).getCount(),
-      query.andWhere('tax.status = :status', { status: TaxStatus.PARTIAL }).getCount(),
-      query.andWhere('tax.status = :status', { status: TaxStatus.EXEMPTED }).getCount(),
-    ]);
+    const [total, pending, paid, overdue, partial, exempted] =
+      await Promise.all([
+        query.getCount(),
+        query
+          .andWhere('tax.status = :status', { status: TaxStatus.PENDING })
+          .getCount(),
+        query
+          .andWhere('tax.status = :status', { status: TaxStatus.PAID })
+          .getCount(),
+        query
+          .andWhere('tax.status = :status', { status: TaxStatus.OVERDUE })
+          .getCount(),
+        query
+          .andWhere('tax.status = :status', { status: TaxStatus.PARTIAL })
+          .getCount(),
+        query
+          .andWhere('tax.status = :status', { status: TaxStatus.EXEMPTED })
+          .getCount(),
+      ]);
 
     // Calculate revenue statistics
-    const revenueQuery = this.taxRepository.createQueryBuilder('tax')
+    const revenueQuery = this.taxRepository
+      .createQueryBuilder('tax')
       .select([
         'SUM(tax.taxAmount) as totalAssessed',
         'SUM(tax.paidAmount) as totalCollected',
@@ -301,8 +386,13 @@ export class LandTaxesService {
     // Apply same user filtering for revenue
     if (user.role === UserRole.CITIZEN) {
       revenueQuery.andWhere('land.owner.id = :userId', { userId: user.id });
-    } else if (user.role === UserRole.TAX_OFFICER || user.role === UserRole.LAND_OFFICER) {
-      revenueQuery.andWhere('land.district = :district', { district: user.district });
+    } else if (
+      user.role === UserRole.TAX_OFFICER ||
+      user.role === UserRole.LAND_OFFICER
+    ) {
+      revenueQuery.andWhere('land.district = :district', {
+        district: user.district,
+      });
     }
 
     const revenue = await revenueQuery.getRawOne();
@@ -320,8 +410,12 @@ export class LandTaxesService {
         totalAssessed: parseFloat(revenue.totalAssessed) || 0,
         totalCollected: parseFloat(revenue.totalCollected) || 0,
         totalPenalties: parseFloat(revenue.totalPenalties) || 0,
-        collectionRate: revenue.totalAssessed > 0 ? 
-          (parseFloat(revenue.totalCollected) / parseFloat(revenue.totalAssessed)) * 100 : 0,
+        collectionRate:
+          revenue.totalAssessed > 0
+            ? (parseFloat(revenue.totalCollected) /
+                parseFloat(revenue.totalAssessed)) *
+              100
+            : 0,
       },
     };
   }
@@ -335,13 +429,22 @@ export class LandTaxesService {
   }
 
   async markAsExempt(id: string, reason: string, user: User): Promise<LandTax> {
-    if (![UserRole.TAX_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.REGISTRAR, UserRole.SUPER_ADMIN].includes(user.role)) {
+    if (
+      ![
+        UserRole.TAX_OFFICER,
+        UserRole.DISTRICT_ADMIN,
+        UserRole.REGISTRAR,
+        UserRole.SUPER_ADMIN,
+      ].includes(user.role)
+    ) {
       throw new ForbiddenException('Insufficient permissions to exempt taxes');
     }
 
     const tax = await this.findOne(id, user);
     tax.status = TaxStatus.EXEMPTED;
-    tax.notes = tax.notes ? `${tax.notes}\nExempted: ${reason}` : `Exempted: ${reason}`;
+    tax.notes = tax.notes
+      ? `${tax.notes}\nExempted: ${reason}`
+      : `Exempted: ${reason}`;
 
     return this.taxRepository.save(tax);
   }
@@ -354,14 +457,19 @@ export class LandTaxesService {
     const now = new Date();
     if (now > tax.dueDate) {
       // Mark as overdue
-      if (tax.status === TaxStatus.PENDING || tax.status === TaxStatus.PARTIAL) {
+      if (
+        tax.status === TaxStatus.PENDING ||
+        tax.status === TaxStatus.PARTIAL
+      ) {
         tax.status = TaxStatus.OVERDUE;
       }
 
       // Calculate penalty (2% per month overdue)
-      const monthsOverdue = Math.ceil((now.getTime() - tax.dueDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+      const monthsOverdue = Math.ceil(
+        (now.getTime() - tax.dueDate.getTime()) / (1000 * 60 * 60 * 24 * 30),
+      );
       const penaltyAmount = tax.taxAmount * this.PENALTY_RATE * monthsOverdue;
-      
+
       if (penaltyAmount > tax.penaltyAmount) {
         tax.penaltyAmount = penaltyAmount;
         await this.taxRepository.save(tax);
@@ -371,11 +479,13 @@ export class LandTaxesService {
 
   async remove(id: string, user: User): Promise<void> {
     if (![UserRole.SUPER_ADMIN, UserRole.DISTRICT_ADMIN].includes(user.role)) {
-      throw new ForbiddenException('Insufficient permissions to delete tax records');
+      throw new ForbiddenException(
+        'Insufficient permissions to delete tax records',
+      );
     }
 
     const tax = await this.findOne(id, user);
-    
+
     if (tax.status === TaxStatus.PAID || tax.status === TaxStatus.PARTIAL) {
       throw new BadRequestException('Cannot delete tax record with payments');
     }

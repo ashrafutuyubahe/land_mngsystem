@@ -58,6 +58,109 @@ export class LandRegistrationController {
     return this.landRegistrationService.findAll(req.user);
   }
 
+  @Get('analytics')
+  @UseGuards(RolesGuard)
+  @Roles(
+    UserRole.LAND_OFFICER,
+    UserRole.DISTRICT_ADMIN,
+    UserRole.REGISTRAR,
+    UserRole.SUPER_ADMIN,
+  )
+  @ApiOperation({
+    summary: 'Get land records analytics (high-performance with ClickHouse)',
+    description:
+      'Retrieve land records from ClickHouse for large-scale analytics and reporting. Supports advanced filtering and pagination.',
+  })
+  @ApiQuery({
+    name: 'district',
+    required: false,
+    description: 'Filter by district',
+  })
+  @ApiQuery({
+    name: 'landUse',
+    required: false,
+    description: 'Filter by land use type',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Filter by status',
+  })
+  @ApiQuery({
+    name: 'minArea',
+    required: false,
+    description: 'Minimum area filter',
+  })
+  @ApiQuery({
+    name: 'maxArea',
+    required: false,
+    description: 'Maximum area filter',
+  })
+  @ApiQuery({
+    name: 'dateFrom',
+    required: false,
+    description: 'Date from filter (ISO format)',
+  })
+  @ApiQuery({
+    name: 'dateTo',
+    required: false,
+    description: 'Date to filter (ISO format)',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Records per page (default: 100)',
+  })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    description: 'Field to sort by',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    description: 'Sort order: ASC or DESC',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Land records analytics retrieved successfully',
+  })
+  async findAllAnalytics(
+    @Request() req,
+    @Query('district') district?: string,
+    @Query('landUse') landUse?: string,
+    @Query('status') status?: string,
+    @Query('minArea') minArea?: number,
+    @Query('maxArea') maxArea?: number,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
+  ) {
+    const filters = {
+      district,
+      landUse,
+      status,
+      minArea: minArea ? Number(minArea) : undefined,
+      maxArea: maxArea ? Number(maxArea) : undefined,
+      dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+      dateTo: dateTo ? new Date(dateTo) : undefined,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      sortBy,
+      sortOrder,
+    };
+
+    return this.landRegistrationService.findAllAnalytics(req.user, filters);
+  }
+
   @Get('by-district')
   @UseGuards(RolesGuard)
   @Roles(
@@ -147,5 +250,38 @@ export class LandRegistrationController {
   })
   async remove(@Param('id') id: string, @Request() req) {
     return this.landRegistrationService.remove(id, req.user);
+  }
+
+  @Post('sync-to-clickhouse')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SYSTEM_ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Bulk sync all land records to ClickHouse',
+    description:
+      'Manually trigger synchronization of all land records from PostgreSQL to ClickHouse for analytics. This is an admin-only operation.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Bulk sync operation completed',
+    schema: {
+      type: 'object',
+      properties: {
+        synced: { type: 'number' },
+        errors: { type: 'number' },
+        message: { type: 'string' },
+        triggered_by: { type: 'string' },
+        timestamp: { type: 'string', format: 'date-time' },
+      },
+    },
+  })
+  async bulkSyncToClickHouse(@Request() req) {
+    const result = await this.landRegistrationService.bulkSyncToClickHouse();
+
+    return {
+      ...result,
+      message: 'Bulk sync operation completed',
+      triggered_by: req.user.id,
+      timestamp: new Date().toISOString(),
+    };
   }
 }

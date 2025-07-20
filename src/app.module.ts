@@ -8,6 +8,7 @@ import { ConflictResolutionModule } from './conflict-resolution/conflict-resolut
 import { UrbanizationModule } from './urbanization/urbanization.module';
 import { AuthModule } from './auth/auth.module';
 import { SettingsModule } from './settings/settings.module';
+import { ClickHouseModule } from './clickhouse/clickhouse.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -39,6 +40,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     UrbanizationModule,
     AuthModule,
     SettingsModule,
+    ClickHouseModule,
   ],
   controllers: [AppController],
   providers: [AppService],

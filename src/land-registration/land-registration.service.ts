@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,12 +12,19 @@ import { UpdateLandRecordDto } from './dto/update-land-record.dto';
 import { User } from '../auth/entities/user.entity';
 import { LandStatus } from '../common/enums/status.enum';
 import { UserRole } from '../auth/enums/user-role.enum';
+import {
+  ClickHouseService,
+  LandRecordAnalytics,
+} from '../clickhouse/clickhouse.service';
 
 @Injectable()
 export class LandRegistrationService {
+  private readonly logger = new Logger(LandRegistrationService.name);
+
   constructor(
     @InjectRepository(LandRecord)
     private landRecordRepository: Repository<LandRecord>,
+    private readonly clickHouseService: ClickHouseService,
   ) {}
 
   async create(
@@ -46,7 +54,14 @@ export class LandRegistrationService {
       registeredBy: owner.id,
     });
 
-    return this.landRecordRepository.save(landRecord);
+    const savedRecord = await this.landRecordRepository.save(landRecord);
+
+    // Sync to ClickHouse for analytics (async, don't block the response)
+    this.syncToClickHouse(savedRecord).catch((error) => {
+      this.logger.error('Failed to sync land record to ClickHouse:', error);
+    });
+
+    return savedRecord;
   }
 
   async findAll(user: User): Promise<LandRecord[]> {
@@ -184,6 +199,182 @@ export class LandRegistrationService {
       where: { owner: { id: ownerId } },
       relations: ['owner'],
     });
+  }
+
+  // ClickHouse Analytics Integration
+  private async syncToClickHouse(landRecord: LandRecord): Promise<void> {
+    try {
+      const analyticsRecord: LandRecordAnalytics = {
+        id: landRecord.id,
+        parcel_number: landRecord.parcelNumber,
+        upi_number: landRecord.upiNumber,
+        land_use: landRecord.landUseType,
+        area: landRecord.area,
+        district: landRecord.district,
+        sector: landRecord.sector,
+        cell: landRecord.cell,
+        village: landRecord.village,
+        status: landRecord.status,
+        owner_name: `${landRecord.owner.firstName} ${landRecord.owner.lastName}`,
+        registration_date: landRecord.createdAt,
+        created_at: landRecord.createdAt,
+        updated_at: landRecord.updatedAt,
+        lat: landRecord.coordinates?.latitude,
+        lng: landRecord.coordinates?.longitude,
+        estimated_value: landRecord.marketValue,
+        land_type: landRecord.landUseType,
+        tenure_type: 'FREEHOLD', // Default value, can be extended later
+      };
+
+      await this.clickHouseService.syncLandRecord(analyticsRecord);
+      this.logger.log(`Synced land record ${landRecord.id} to ClickHouse`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync land record ${landRecord.id} to ClickHouse:`,
+        error,
+      );
+    }
+  }
+
+  // High-performance findAll using ClickHouse for large datasets
+  async findAllAnalytics(
+    user: User,
+    filters: {
+      district?: string;
+      landUse?: string;
+      status?: string;
+      minArea?: number;
+      maxArea?: number;
+      dateFrom?: Date;
+      dateTo?: Date;
+      page?: number;
+      limit?: number;
+      sortBy?: string;
+      sortOrder?: 'ASC' | 'DESC';
+    } = {},
+  ): Promise<{
+    data: LandRecordAnalytics[];
+    total: number;
+    page: number;
+    totalPages: number;
+    source: 'clickhouse' | 'postgres';
+  }> {
+    try {
+      // Apply user-based filtering
+      const userFilters = { ...filters };
+
+      if (user.role === UserRole.CITIZEN) {
+        // Citizens can only see their own records - we need to get from PostgreSQL
+        const records = await this.findAll(user);
+        return {
+          data: records.map((record) => this.transformToAnalytics(record)),
+          total: records.length,
+          page: filters.page || 1,
+          totalPages: 1,
+          source: 'postgres',
+        };
+      } else if (user.role === UserRole.LAND_OFFICER && user.district) {
+        userFilters.district = user.district;
+      }
+
+      // Use ClickHouse for high-performance analytics
+      const result =
+        await this.clickHouseService.getLandRecordsAnalytics(userFilters);
+
+      return {
+        ...result,
+        source: 'clickhouse',
+      };
+    } catch (error) {
+      this.logger.error(
+        'Failed to get analytics from ClickHouse, falling back to PostgreSQL:',
+        error,
+      );
+
+      // Fallback to PostgreSQL
+      const records = await this.findAll(user);
+      return {
+        data: records.map((record) => this.transformToAnalytics(record)),
+        total: records.length,
+        page: filters.page || 1,
+        totalPages: 1,
+        source: 'postgres',
+      };
+    }
+  }
+
+  private transformToAnalytics(record: LandRecord): LandRecordAnalytics {
+    return {
+      id: record.id,
+      parcel_number: record.parcelNumber,
+      upi_number: record.upiNumber,
+      land_use: record.landUseType,
+      area: record.area,
+      district: record.district,
+      sector: record.sector,
+      cell: record.cell,
+      village: record.village,
+      status: record.status,
+      owner_name: `${record.owner.firstName} ${record.owner.lastName}`,
+      registration_date: record.createdAt,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+      lat: record.coordinates?.latitude,
+      lng: record.coordinates?.longitude,
+      estimated_value: record.marketValue,
+      land_type: record.landUseType,
+      tenure_type: 'FREEHOLD', // Default value, can be extended later
+    };
+  }
+
+  // Bulk sync all existing records to ClickHouse
+  async bulkSyncToClickHouse(): Promise<{ synced: number; errors: number }> {
+    try {
+      this.logger.log('Starting bulk sync of land records to ClickHouse...');
+
+      const batchSize = 1000;
+      let offset = 0;
+      let synced = 0;
+      let errors = 0;
+
+      while (true) {
+        const records = await this.landRecordRepository.find({
+          relations: ['owner'],
+          take: batchSize,
+          skip: offset,
+        });
+
+        if (records.length === 0) break;
+
+        const analyticsRecords: LandRecordAnalytics[] = records.map((record) =>
+          this.transformToAnalytics(record),
+        );
+
+        try {
+          await this.clickHouseService.bulkSyncLandRecords(analyticsRecords);
+          synced += records.length;
+          this.logger.log(
+            `Synced batch of ${records.length} records (total: ${synced})`,
+          );
+        } catch (error) {
+          errors += records.length;
+          this.logger.error(
+            `Failed to sync batch starting at offset ${offset}:`,
+            error,
+          );
+        }
+
+        offset += batchSize;
+      }
+
+      this.logger.log(
+        `Bulk sync completed. Synced: ${synced}, Errors: ${errors}`,
+      );
+      return { synced, errors };
+    } catch (error) {
+      this.logger.error('Bulk sync failed:', error);
+      throw error;
+    }
   }
 
   async findByDistrict(district: string): Promise<LandRecord[]> {

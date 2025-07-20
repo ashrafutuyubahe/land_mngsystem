@@ -22,7 +22,9 @@
     "migration:generate": "typeorm-ts-node-commonjs -d src/data-source.ts migration:generate"
   },
   "dependencies": {
+    "@clickhouse/client": "^1.11.2",
     "@nestjs/axios": "^3.0.3",
+    "@nestjs/bull": "^11.0.2",
     "@nestjs/cache-manager": "^2.0.0",
     "@nestjs/common": "^10.4.4",
     "@nestjs/config": "^3.2.3",
@@ -40,11 +42,13 @@
     "axios": "^1.7.4",
     "base64url": "^3.0.1",
     "bcryptjs": "^2.4.3",
+    "bull": "^4.16.5",
     "cache-manager": "^5.7.6",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
+    "ioredis": "^5.6.1",
     "jsonwebtoken": "^9.0.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

@@ -137,6 +137,8 @@ export class LandRegistrationController {
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.REGISTRAR)
   @ApiOperation({ summary: 'Delete a land record' })
   @ApiResponse({ status: 200, description: 'Land record deleted successfully' })
   @ApiResponse({

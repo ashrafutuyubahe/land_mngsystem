@@ -48,6 +48,7 @@
     "bull": "^4.16.5",
     "cache-manager": "^5.7.6",
     "cache-manager-redis-store": "^3.0.1",
+    "cache-manager-redis-yet": "^5.1.5",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "date-fns": "^4.1.0",

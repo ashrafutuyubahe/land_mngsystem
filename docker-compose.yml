@@ -1,35 +1,71 @@
-version: '3'
+version: '3.8'
+
 services:
+  
   clickhouse:
-    image: clickhouse/clickhouse-server
+    image: clickhouse/clickhouse-server:latest
+    container_name: land_clickhouse
     ports:
       - '8123:8123'
       - '9000:9000'
+    environment:
+      CLICKHOUSE_DB: land_analytics
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 0
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
     volumes:
-      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:8123/ping',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
+  # Redis for Caching (no password)
   redis:
-    image: redis:6
+    image: redis:7-alpine
+    container_name: land_redis
     ports:
       - '6379:6379'
-    command: redis-server --requirepass myStrongPassword
     volumes:
-      - redis-data:/data
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
+  # RabbitMQ for Event-Driven Architecture
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: rabbitmq
-    ports:
-      - '5672:5672' # RabbitMQ broker port
-      - '15672:15672' # Web UI (management console)
+    container_name: land_rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin123
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
-  clickhouse-data:
-  redis-data:
+  postgres_data:
+  clickhouse_data:
+  redis_data:
+  rabbitmq_data:

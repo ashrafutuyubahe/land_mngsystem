@@ -285,42 +285,8 @@ npm run test:e2e       # Run end-to-end tests
 npm run lint           # Lint the code
 npm run format         # Format the code with Prettier
 ```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Database Connection Error**
-   - Ensure PostgreSQL is running
-   - Check database credentials in `.env`
-   - Verify database exists
-
-2. **TypeORM Errors**
-   - Clear `node_modules` and reinstall
-   - Check entity imports and decorators
-
-3. **JWT Errors**
-   - Verify JWT_SECRET is set in `.env`
-   - Check token format in Authorization header
-
 ## 📄 License
 
 This project is licensed under the UNLICENSED License.
-
-## 👥 Team
-
-- **Author**: [Rwanda Land Administration Team]
-- **Contact**: [Contact Information]
-
-## 🌟 Features Coming Soon
-
-- [ ] Real-time notifications
-- [ ] Mobile app integration
-- [ ] Advanced analytics dashboard
-- [ ] Document management system
-- [ ] GIS mapping integration
-- [ ] Payment gateway integration
-
----
 
 **Made with ❤️ for Rwanda's Digital Transformation**

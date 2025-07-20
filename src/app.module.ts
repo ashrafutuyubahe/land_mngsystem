@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { SettingsModule } from './settings/settings.module';
 import { ClickHouseModule } from './clickhouse/clickhouse.module';
 import { RedisModule } from './redis/redis.module';
+import { EventModule } from './events/event.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -43,6 +44,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     SettingsModule,
     ClickHouseModule,
     RedisModule,
+    EventModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -4,7 +4,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as redisStore from 'cache-manager-redis-store';
 import { RedisService } from './redis.service';
 
-
 @Module({
   imports: [
     CacheModule.registerAsync({

@@ -193,4 +193,63 @@ export class LandTransferController {
   async cancel(@Param('id') id: string, @Request() req) {
     return this.landTransferService.cancel(id, req.user);
   }
+
+  // Cache-enabled endpoints
+  @Get('user/:userId')
+  @ApiOperation({ summary: 'Get transfers for a specific user (cached)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User transfers retrieved successfully from cache',
+  })
+  @Roles(UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.SYSTEM_ADMIN)
+  async getTransfersByUser(@Param('userId') userId: string, @Request() req) {
+    return this.landTransferService.findByUser(userId);
+  }
+
+  @Get('history/:landId')
+  @ApiOperation({ summary: 'Get transfer history for a land parcel (cached)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Transfer history retrieved successfully from cache',
+  })
+  async getTransferHistory(@Param('landId') landId: string, @Request() req) {
+    return this.landTransferService.getTransferHistory(landId, req.user);
+  }
+
+  @Get('district/:district')
+  @ApiOperation({ summary: 'Get transfers by district (cached)' })
+  @ApiResponse({
+    status: 200,
+    description: 'District transfers retrieved successfully from cache',
+  })
+  @Roles(UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.SYSTEM_ADMIN)
+  async getTransfersByDistrict(
+    @Param('district') district: string,
+    @Request() req,
+  ) {
+    return this.landTransferService.getTransfersByDistrict(district, req.user);
+  }
+
+  @Get('cache/health')
+  @ApiOperation({ summary: 'Check Redis cache health' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cache health status',
+  })
+  @Roles(UserRole.SYSTEM_ADMIN, UserRole.DISTRICT_ADMIN)
+  async getCacheHealth() {
+    return this.landTransferService.getCacheHealth();
+  }
+
+  @Post('cache/preload')
+  @ApiOperation({ summary: 'Preload frequently accessed transfers into cache' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cache preloading initiated',
+  })
+  @Roles(UserRole.SYSTEM_ADMIN)
+  async preloadCache() {
+    await this.landTransferService.preloadTransferCaches();
+    return { message: 'Cache preloading completed' };
+  }
 }

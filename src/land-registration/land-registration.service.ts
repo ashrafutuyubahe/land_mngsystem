@@ -16,6 +16,7 @@ import {
   ClickHouseService,
   LandRecordAnalytics,
 } from '../clickhouse/clickhouse.service';
+import { EventService } from '../events/event.service';
 
 @Injectable()
 export class LandRegistrationService {
@@ -25,6 +26,7 @@ export class LandRegistrationService {
     @InjectRepository(LandRecord)
     private landRecordRepository: Repository<LandRecord>,
     private readonly clickHouseService: ClickHouseService,
+    private readonly eventService: EventService,
   ) {}
 
   async create(
@@ -60,6 +62,16 @@ export class LandRegistrationService {
     this.syncToClickHouse(savedRecord).catch((error) => {
       this.logger.error('Failed to sync land record to ClickHouse:', error);
     });
+
+    // Publish land registration event to RabbitMQ
+    try {
+      await this.eventService.publishLandRegistered(savedRecord, owner.id);
+      this.logger.log(
+        `Published land registration event for parcel: ${savedRecord.parcelNumber}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to publish land registration event:', error);
+    }
 
     return savedRecord;
   }
@@ -122,8 +134,25 @@ export class LandRegistrationService {
       throw new ForbiddenException('Cannot update approved land record');
     }
 
+    const originalRecord = { ...landRecord };
     Object.assign(landRecord, updateLandRecordDto);
-    return this.landRecordRepository.save(landRecord);
+    const updatedRecord = await this.landRecordRepository.save(landRecord);
+
+    // Publish land updated event to RabbitMQ
+    try {
+      await this.eventService.publishLandUpdated(
+        updatedRecord,
+        user.id,
+        updateLandRecordDto,
+      );
+      this.logger.log(
+        `Published land update event for parcel: ${updatedRecord.parcelNumber}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to publish land update event:', error);
+    }
+
+    return updatedRecord;
   }
 
   async approve(id: string, user: User): Promise<LandRecord> {
@@ -150,11 +179,29 @@ export class LandRegistrationService {
       );
     }
 
+    const oldStatus = landRecord.status;
     landRecord.status = LandStatus.APPROVED;
     landRecord.approvedBy = user.id;
     landRecord.approvedAt = new Date();
 
-    return this.landRecordRepository.save(landRecord);
+    const approvedRecord = await this.landRecordRepository.save(landRecord);
+
+    // Publish land status changed event to RabbitMQ
+    try {
+      await this.eventService.publishLandStatusChanged(
+        approvedRecord,
+        oldStatus,
+        LandStatus.APPROVED,
+        user.id,
+      );
+      this.logger.log(
+        `Published land approval event for parcel: ${approvedRecord.parcelNumber}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to publish land approval event:', error);
+    }
+
+    return approvedRecord;
   }
 
   async reject(id: string, reason: string, user: User): Promise<LandRecord> {
@@ -171,13 +218,31 @@ export class LandRegistrationService {
     }
 
     const landRecord = await this.findOne(id, user);
+    const oldStatus = landRecord.status;
 
     landRecord.status = LandStatus.REJECTED;
     landRecord.rejectionReason = reason;
     landRecord.approvedBy = user.id;
     landRecord.approvedAt = new Date();
 
-    return this.landRecordRepository.save(landRecord);
+    const rejectedRecord = await this.landRecordRepository.save(landRecord);
+
+    // Publish land status changed event to RabbitMQ
+    try {
+      await this.eventService.publishLandStatusChanged(
+        rejectedRecord,
+        oldStatus,
+        LandStatus.REJECTED,
+        user.id,
+      );
+      this.logger.log(
+        `Published land rejection event for parcel: ${rejectedRecord.parcelNumber}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to publish land rejection event:', error);
+    }
+
+    return rejectedRecord;
   }
 
   async remove(id: string, user: User): Promise<void> {

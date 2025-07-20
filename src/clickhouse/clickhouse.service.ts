@@ -198,7 +198,10 @@ export class ClickHouseService implements OnModuleInit {
 
       this.logger.debug(`Synced land record ${record.id} to ClickHouse`);
     } catch (error) {
-      this.logger.error(`Failed to sync land record ${record.id} to ClickHouse:`, error);
+      this.logger.error(
+        `Failed to sync land record ${record.id} to ClickHouse:`,
+        error,
+      );
       throw error;
     }
   }
@@ -212,17 +215,21 @@ export class ClickHouseService implements OnModuleInit {
       const batchSize = 1000;
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize);
-        
+
         await this.clickhouse.insert({
           table: 'land_analytics.land_records',
           values: batch,
           format: 'JSONEachRow',
         });
 
-        this.logger.debug(`Synced batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(records.length / batchSize)} (${batch.length} records)`);
+        this.logger.debug(
+          `Synced batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(records.length / batchSize)} (${batch.length} records)`,
+        );
       }
 
-      this.logger.log(`Successfully synced ${records.length} land records to ClickHouse`);
+      this.logger.log(
+        `Successfully synced ${records.length} land records to ClickHouse`,
+      );
     } catch (error) {
       this.logger.error('Failed to bulk sync land records:', error);
       throw error;
@@ -297,7 +304,7 @@ export class ClickHouseService implements OnModuleInit {
       format: 'JSONEachRow',
     });
 
-    const totalData = await countResult.json() as CountResult[];
+    const totalData = (await countResult.json()) as CountResult[];
     const total = totalData[0]?.total || 0;
 
     // Get paginated data
@@ -314,7 +321,7 @@ export class ClickHouseService implements OnModuleInit {
       format: 'JSONEachRow',
     });
 
-    const data = await dataResult.json() as LandRecordAnalytics[];
+    const data = (await dataResult.json()) as LandRecordAnalytics[];
 
     return {
       data,
@@ -433,18 +440,27 @@ export class ClickHouseService implements OnModuleInit {
         total_records: basicStats[0]?.total_records || 0,
         total_area: basicStats[0]?.total_area || 0,
         avg_area: basicStats[0]?.avg_area || 0,
-        records_by_district: byDistrict.reduce<Record<string, number>>((acc, item) => {
-          acc[item.district] = item.count;
-          return acc;
-        }, {}),
-        records_by_land_use: byLandUse.reduce<Record<string, number>>((acc, item) => {
-          acc[item.land_use] = item.count;
-          return acc;
-        }, {}),
-        records_by_status: byStatus.reduce<Record<string, number>>((acc, item) => {
-          acc[item.status] = item.count;
-          return acc;
-        }, {}),
+        records_by_district: byDistrict.reduce<Record<string, number>>(
+          (acc, item) => {
+            acc[item.district] = item.count;
+            return acc;
+          },
+          {},
+        ),
+        records_by_land_use: byLandUse.reduce<Record<string, number>>(
+          (acc, item) => {
+            acc[item.land_use] = item.count;
+            return acc;
+          },
+          {},
+        ),
+        records_by_status: byStatus.reduce<Record<string, number>>(
+          (acc, item) => {
+            acc[item.status] = item.count;
+            return acc;
+          },
+          {},
+        ),
         monthly_registrations: monthlyRegistrations,
         area_distribution: areaDistribution,
       };
@@ -488,7 +504,7 @@ export class ClickHouseService implements OnModuleInit {
         query: 'SELECT 1 as health',
         format: 'JSONEachRow',
       });
-      const data = await result.json() as HealthCheckResult[];
+      const data = (await result.json()) as HealthCheckResult[];
       return data[0]?.health === 1;
     } catch (error) {
       this.logger.error('ClickHouse health check failed:', error);
@@ -539,29 +555,50 @@ export class ClickHouseService implements OnModuleInit {
         `,
       };
 
-      const [basicStats, landUseDistribution, statusDistribution, recentRegistrations] = await Promise.all([
-        this.clickhouse.query({ query: queries.basicStats, format: 'JSONEachRow' }).then(r => r.json() as Promise<BasicStatsResult[]>),
-        this.clickhouse.query({ query: queries.landUseDistribution, format: 'JSONEachRow' }).then(r => r.json() as Promise<LandUseStatsResult[]>),
-        this.clickhouse.query({ query: queries.statusDistribution, format: 'JSONEachRow' }).then(r => r.json() as Promise<StatusStatsResult[]>),
-        this.clickhouse.query({ query: queries.recentRegistrations, format: 'JSONEachRow' }).then(r => r.json() as Promise<CountResult[]>),
+      const [
+        basicStats,
+        landUseDistribution,
+        statusDistribution,
+        recentRegistrations,
+      ] = await Promise.all([
+        this.clickhouse
+          .query({ query: queries.basicStats, format: 'JSONEachRow' })
+          .then((r) => r.json() as Promise<BasicStatsResult[]>),
+        this.clickhouse
+          .query({ query: queries.landUseDistribution, format: 'JSONEachRow' })
+          .then((r) => r.json() as Promise<LandUseStatsResult[]>),
+        this.clickhouse
+          .query({ query: queries.statusDistribution, format: 'JSONEachRow' })
+          .then((r) => r.json() as Promise<StatusStatsResult[]>),
+        this.clickhouse
+          .query({ query: queries.recentRegistrations, format: 'JSONEachRow' })
+          .then((r) => r.json() as Promise<CountResult[]>),
       ]);
 
       return {
         total_records: basicStats[0]?.total_records || 0,
         total_area: basicStats[0]?.total_area || 0,
         avg_area: basicStats[0]?.avg_area || 0,
-        land_use_distribution: landUseDistribution.reduce<Record<string, number>>((acc, item) => {
+        land_use_distribution: landUseDistribution.reduce<
+          Record<string, number>
+        >((acc, item) => {
           acc[item.land_use] = item.count;
           return acc;
         }, {}),
-        status_distribution: statusDistribution.reduce<Record<string, number>>((acc, item) => {
-          acc[item.status] = item.count;
-          return acc;
-        }, {}),
+        status_distribution: statusDistribution.reduce<Record<string, number>>(
+          (acc, item) => {
+            acc[item.status] = item.count;
+            return acc;
+          },
+          {},
+        ),
         recent_registrations: recentRegistrations[0]?.total || 0,
       };
     } catch (error) {
-      this.logger.error(`Failed to get district analytics for ${district}:`, error);
+      this.logger.error(
+        `Failed to get district analytics for ${district}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -573,7 +610,7 @@ export class ClickHouseService implements OnModuleInit {
         ALTER TABLE land_analytics.activity_log
         DELETE WHERE timestamp < subtractDays(now(), ${olderThanDays})
       `;
-      
+
       await this.clickhouse.exec({ query });
       this.logger.log(`Cleared activity logs older than ${olderThanDays} days`);
     } catch (error) {
@@ -624,13 +661,24 @@ export class ClickHouseService implements OnModuleInit {
         `,
       };
 
-      const [today, thisWeek, thisMonth, activeUsersToday, popularDistricts] = await Promise.all([
-        this.clickhouse.query({ query: queries.today, format: 'JSONEachRow' }).then(r => r.json() as Promise<CountResult[]>),
-        this.clickhouse.query({ query: queries.thisWeek, format: 'JSONEachRow' }).then(r => r.json() as Promise<CountResult[]>),
-        this.clickhouse.query({ query: queries.thisMonth, format: 'JSONEachRow' }).then(r => r.json() as Promise<CountResult[]>),
-        this.clickhouse.query({ query: queries.activeUsersToday, format: 'JSONEachRow' }).then(r => r.json() as Promise<CountResult[]>),
-        this.clickhouse.query({ query: queries.popularDistricts, format: 'JSONEachRow' }).then(r => r.json() as Promise<DistrictStatsResult[]>),
-      ]);
+      const [today, thisWeek, thisMonth, activeUsersToday, popularDistricts] =
+        await Promise.all([
+          this.clickhouse
+            .query({ query: queries.today, format: 'JSONEachRow' })
+            .then((r) => r.json() as Promise<CountResult[]>),
+          this.clickhouse
+            .query({ query: queries.thisWeek, format: 'JSONEachRow' })
+            .then((r) => r.json() as Promise<CountResult[]>),
+          this.clickhouse
+            .query({ query: queries.thisMonth, format: 'JSONEachRow' })
+            .then((r) => r.json() as Promise<CountResult[]>),
+          this.clickhouse
+            .query({ query: queries.activeUsersToday, format: 'JSONEachRow' })
+            .then((r) => r.json() as Promise<CountResult[]>),
+          this.clickhouse
+            .query({ query: queries.popularDistricts, format: 'JSONEachRow' })
+            .then((r) => r.json() as Promise<DistrictStatsResult[]>),
+        ]);
 
       return {
         registrations_today: today[0]?.total || 0,

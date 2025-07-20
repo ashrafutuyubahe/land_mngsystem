@@ -1,5 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
-import {
+  import {
   IsString,
   IsOptional,
   IsEnum,
@@ -8,10 +7,10 @@ import {
   MaxLength,
   IsDateString,
 } from 'class-validator';
-import {
-  PermitStatus,
-  ConstructionPermit,
-} from '../entities/construction-permit.entity';
+import { ConstructionType, PermitStatus } from '../enums/construction.enum';
+import { ApiProperty } from '@nestjs/swagger';
+import { from } from 'rxjs';
+import { ConstructionPermit } from '../entities/construction-permit.entity';
 
 export class UpdateConstructionPermitDto {
   @ApiProperty({

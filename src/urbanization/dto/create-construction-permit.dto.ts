@@ -10,10 +10,7 @@ import {
   MaxLength,
   IsDateString,
 } from 'class-validator';
-import {
-  ConstructionPermit,
-  PermitStatus,
-} from '../entities/construction-permit.entity';
+import { ConstructionType } from '../enums/construction.enum';
 
 export class CreateConstructionPermitDto {
   @ApiProperty({
@@ -26,12 +23,12 @@ export class CreateConstructionPermitDto {
 
   @ApiProperty({
     description: 'Type of construction',
-    enum: ConstructionPermit['constructionType'],
-    example: 'RESIDENTIAL_HOUSE',
+    enum: ConstructionType,
+    example: ConstructionType.RESIDENTIAL_HOUSE,
   })
-  @IsEnum(String)
+  @IsEnum(ConstructionType)
   @IsNotEmpty()
-  constructionType: string;
+  constructionType: ConstructionType;
 
   @ApiProperty({
     description: 'Title of the construction project',

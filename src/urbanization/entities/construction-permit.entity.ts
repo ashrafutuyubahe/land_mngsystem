@@ -5,10 +5,13 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToMany,
+  JoinColumn,
 } from 'typeorm';
 import { User } from '../../auth/entities/user.entity';
 import { LandRecord } from '../../land-registration/entities/land-record.entity';
-import { PermitStatus } from '../../common/enums/status.enum';
+import { ConstructionType, PermitStatus } from '../enums/construction.enum';
+import { Inspection } from './inspection.entity';
 
 @Entity('construction_permits')
 export class ConstructionPermit {
@@ -22,7 +25,13 @@ export class ConstructionPermit {
   projectTitle: string;
 
   @Column('text')
-  projectDescription: string;
+  description: string;
+
+  @Column({
+    type: 'enum',
+    enum: ConstructionType,
+  })
+  constructionType: ConstructionType;
 
   @Column('decimal', { precision: 15, scale: 2 })
   estimatedCost: number;
@@ -30,11 +39,29 @@ export class ConstructionPermit {
   @Column('decimal', { precision: 10, scale: 2 })
   constructionArea: number; // in square meters
 
-  @Column()
-  buildingType: string; // residential, commercial, etc.
+  @Column({ default: 1 })
+  numberOfFloors: number;
+
+  @Column({ nullable: true })
+  contractor: string;
+
+  @Column({ nullable: true })
+  architect: string;
+
+  @Column('text', { nullable: true })
+  technicalSpecs: string;
 
   @Column()
-  numberOfFloors: number;
+  plannedStartDate: Date;
+
+  @Column()
+  plannedCompletionDate: Date;
+
+  @Column({ nullable: true })
+  actualStartDate: Date;
+
+  @Column({ nullable: true })
+  actualCompletionDate: Date;
 
   @Column({
     type: 'enum',
@@ -44,19 +71,13 @@ export class ConstructionPermit {
   status: PermitStatus;
 
   @Column('text', { nullable: true })
-  documents: string; // JSON array of document URLs (plans, etc.)
+  documents: string; // JSON array of document URLs
 
   @Column({ nullable: true })
   submittedAt: Date;
 
   @Column({ nullable: true })
-  reviewedBy: string;
-
-  @Column({ nullable: true })
   reviewedAt: Date;
-
-  @Column({ nullable: true })
-  approvedBy: string;
 
   @Column({ nullable: true })
   approvedAt: Date;
@@ -68,6 +89,9 @@ export class ConstructionPermit {
   conditions: string;
 
   @Column('text', { nullable: true })
+  reviewComments: string;
+
+  @Column('text', { nullable: true })
   rejectionReason: string;
 
   @CreateDateColumn()
@@ -76,11 +100,26 @@ export class ConstructionPermit {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @ManyToOne(() => User)
+  // Relationships
+  @ManyToOne(() => User, { eager: true })
+  @JoinColumn({ name: 'applicantId' })
   applicant: User;
 
-  @ManyToOne(() => LandRecord)
-  land: LandRecord;
+  @ManyToOne(() => LandRecord, { eager: true })
+  @JoinColumn({ name: 'landRecordId' })
+  landRecord: LandRecord;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'reviewedById' })
+  reviewedBy: User;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'approvedById' })
+  approvedBy: User;
+
+  @OneToMany(() => Inspection, (inspection) => inspection.permit)
+  inspections: Inspection[];
 }
-export { PermitStatus };
+
+export { ConstructionType, PermitStatus };
 

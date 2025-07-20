@@ -1,0 +1,60 @@
+export enum ConstructionType {
+  RESIDENTIAL_HOUSE = 'residential_house',
+  APARTMENT_BUILDING = 'apartment_building',
+  COMMERCIAL_BUILDING = 'commercial_building',
+  INDUSTRIAL_FACILITY = 'industrial_facility',
+  WAREHOUSE = 'warehouse',
+  OFFICE_BUILDING = 'office_building',
+  SHOPPING_CENTER = 'shopping_center',
+  SCHOOL = 'school',
+  HOSPITAL = 'hospital',
+  RELIGIOUS_BUILDING = 'religious_building',
+  GOVERNMENT_BUILDING = 'government_building',
+  RECREATIONAL_FACILITY = 'recreational_facility',
+  INFRASTRUCTURE = 'infrastructure',
+  RENOVATION = 'renovation',
+  ADDITION = 'addition',
+  OTHER = 'other',
+}
+
+export enum PermitStatus {
+  DRAFT = 'draft',
+  SUBMITTED = 'submitted',
+  UNDER_REVIEW = 'under_review',
+  DOCUMENTS_REQUESTED = 'documents_requested',
+  TECHNICAL_REVIEW = 'technical_review',
+  SITE_INSPECTION_SCHEDULED = 'site_inspection_scheduled',
+  SITE_INSPECTION_COMPLETED = 'site_inspection_completed',
+  APPROVED = 'approved',
+  CONDITIONALLY_APPROVED = 'conditionally_approved',
+  REJECTED = 'rejected',
+  EXPIRED = 'expired',
+  CONSTRUCTION_STARTED = 'construction_started',
+  CONSTRUCTION_COMPLETED = 'construction_completed',
+  FINAL_INSPECTION_SCHEDULED = 'final_inspection_scheduled',
+  FINAL_INSPECTION_PASSED = 'final_inspection_passed',
+  FINAL_INSPECTION_FAILED = 'final_inspection_failed',
+  CERTIFICATE_ISSUED = 'certificate_issued',
+}
+
+export enum InspectionType {
+  SITE_ASSESSMENT = 'site_assessment',
+  FOUNDATION_INSPECTION = 'foundation_inspection',
+  STRUCTURAL_INSPECTION = 'structural_inspection',
+  ELECTRICAL_INSPECTION = 'electrical_inspection',
+  PLUMBING_INSPECTION = 'plumbing_inspection',
+  ROOFING_INSPECTION = 'roofing_inspection',
+  FINAL_INSPECTION = 'final_inspection',
+  SAFETY_INSPECTION = 'safety_inspection',
+  ENVIRONMENTAL_INSPECTION = 'environmental_inspection',
+}
+
+export enum InspectionStatus {
+  SCHEDULED = 'scheduled',
+  IN_PROGRESS = 'in_progress',
+  PASSED = 'passed',
+  FAILED = 'failed',
+  CONDITIONAL_PASS = 'conditional_pass',
+  CANCELLED = 'cancelled',
+  RESCHEDULED = 'rescheduled',
+}

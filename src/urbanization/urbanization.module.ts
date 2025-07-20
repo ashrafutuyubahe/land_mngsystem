@@ -8,7 +8,14 @@ import { LandRecord } from '../land-registration/entities/land-record.entity';
 import { User } from '../auth/entities/user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ConstructionPermit, Inspection, LandRecord, User])],
+  imports: [
+    TypeOrmModule.forFeature([
+      ConstructionPermit,
+      Inspection,
+      LandRecord,
+      User,
+    ]),
+  ],
   controllers: [UrbanizationController],
   providers: [UrbanizationService],
   exports: [UrbanizationService],

@@ -122,4 +122,3 @@ export class ConstructionPermit {
 }
 
 export { ConstructionType, PermitStatus };
-

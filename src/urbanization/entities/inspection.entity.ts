@@ -78,3 +78,5 @@ export class Inspection {
   @JoinColumn({ name: 'scheduledById' })
   scheduledBy: User;
 }
+
+export { InspectionType, InspectionStatus };

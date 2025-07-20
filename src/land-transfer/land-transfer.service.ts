@@ -15,6 +15,7 @@ import { ApproveTransferDto } from './dto/approve-transfer.dto';
 import { RejectTransferDto } from './dto/reject-transfer.dto';
 import { TransferStatus, LandStatus } from '../common/enums/status.enum';
 import { UserRole } from '../auth/enums/user-role.enum';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class LandTransferService {
@@ -25,6 +26,7 @@ export class LandTransferService {
     private landRepository: Repository<LandRecord>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private redisService: RedisService,
   ) {}
 
   async create(
@@ -107,10 +109,37 @@ export class LandTransferService {
     land.status = LandStatus.UNDER_REVIEW;
     await this.landRepository.save(land);
 
-    return this.transferRepository.save(transfer);
+    const savedTransfer = await this.transferRepository.save(transfer);
+
+    // Cache the new transfer and invalidate related caches
+    await this.redisService.cacheLandTransfer(
+      savedTransfer.id,
+      savedTransfer,
+      600,
+    );
+    await this.redisService.invalidateUserTransfers(land.owner.id);
+    await this.redisService.invalidateUserTransfers(newOwnerId);
+    await this.redisService.invalidateTransferHistory(landId);
+
+    // Invalidate district-based caches if land has district info
+    if (land.district) {
+      await this.redisService.invalidateDistrictTransfers(land.district);
+    }
+
+    return savedTransfer;
   }
 
   async findAll(user: User): Promise<LandTransfer[]> {
+    // Create cache key based on user role and user ID
+    const cacheKey = `transfers:all:${user.role}:${user.id}`;
+
+    // Try to get from cache first
+    const cachedTransfers =
+      await this.redisService.get<LandTransfer[]>(cacheKey);
+    if (cachedTransfers) {
+      return cachedTransfers;
+    }
+
     const query = this.transferRepository
       .createQueryBuilder('transfer')
       .leftJoinAndSelect('transfer.currentOwner', 'currentOwner')
@@ -129,10 +158,40 @@ export class LandTransferService {
     }
     // Admins can see all transfers
 
-    return query.orderBy('transfer.createdAt', 'DESC').getMany();
+    const transfers = await query
+      .orderBy('transfer.createdAt', 'DESC')
+      .getMany();
+
+    // Cache the results for 5 minutes
+    await this.redisService.set(cacheKey, transfers, 300);
+
+    return transfers;
   }
 
   async findOne(id: string, user: User): Promise<LandTransfer> {
+    // Try to get from cache first
+    const cachedTransfer = await this.redisService.getCachedLandTransfer(id);
+    if (cachedTransfer) {
+      // Still need to check permissions for cached data
+      if (user.role === UserRole.CITIZEN) {
+        if (
+          cachedTransfer.currentOwner.id !== user.id &&
+          cachedTransfer.newOwner.id !== user.id
+        ) {
+          throw new ForbiddenException('Access denied');
+        }
+      }
+
+      if (
+        user.role === UserRole.LAND_OFFICER &&
+        cachedTransfer.land.district !== user.district
+      ) {
+        throw new ForbiddenException('Access denied');
+      }
+
+      return cachedTransfer;
+    }
+
     const transfer = await this.transferRepository.findOne({
       where: { id },
       relations: ['currentOwner', 'newOwner', 'land', 'land.owner'],
@@ -158,6 +217,9 @@ export class LandTransferService {
     ) {
       throw new ForbiddenException('Access denied');
     }
+
+    // Cache the transfer for future requests
+    await this.redisService.cacheLandTransfer(id, transfer, 600);
 
     return transfer;
   }
@@ -344,14 +406,35 @@ export class LandTransferService {
   }
 
   async findByUser(userId: string): Promise<LandTransfer[]> {
-    return this.transferRepository.find({
+    // Try to get from cache first
+    const cachedTransfers =
+      await this.redisService.getCachedUserTransfers(userId);
+    if (cachedTransfers) {
+      return cachedTransfers;
+    }
+
+    const transfers = await this.transferRepository.find({
       where: [{ currentOwner: { id: userId } }, { newOwner: { id: userId } }],
       relations: ['currentOwner', 'newOwner', 'land'],
       order: { createdAt: 'DESC' },
     });
+
+    // Cache the results for 10 minutes
+    await this.redisService.cacheUserTransfers(userId, transfers, 600);
+
+    return transfers;
   }
 
   async getTransferStatistics(user: User): Promise<any> {
+    // Create cache key based on user role and ID
+    const cacheKey = `transfer:stats:${user.role}:${user.id}`;
+
+    // Try to get from cache first
+    const cachedStats = await this.redisService.get(cacheKey);
+    if (cachedStats) {
+      return cachedStats;
+    }
+
     const query = this.transferRepository
       .createQueryBuilder('transfer')
       .leftJoin('transfer.land', 'land');
@@ -396,7 +479,7 @@ export class LandTransferService {
           .getCount(),
       ]);
 
-    return {
+    const stats = {
       total,
       pending,
       approved,
@@ -404,5 +487,120 @@ export class LandTransferService {
       rejected,
       cancelled,
     };
+
+    // Cache the statistics for 15 minutes
+    await this.redisService.set(cacheKey, stats, 900);
+
+    return stats;
+  }
+
+  // Additional Redis-optimized methods
+  async getTransferHistory(
+    landId: string,
+    user: User,
+  ): Promise<LandTransfer[]> {
+    // Check permissions first
+    const land = await this.landRepository.findOne({
+      where: { id: landId },
+      relations: ['owner'],
+    });
+
+    if (!land) {
+      throw new NotFoundException('Land record not found');
+    }
+
+    if (user.role === UserRole.CITIZEN && land.owner.id !== user.id) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    // Try to get from cache first
+    const cachedHistory =
+      await this.redisService.getCachedTransferHistory(landId);
+    if (cachedHistory) {
+      return cachedHistory;
+    }
+
+    const history = await this.transferRepository.find({
+      where: { land: { id: landId } },
+      relations: ['currentOwner', 'newOwner', 'land'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Cache the history for 15 minutes
+    await this.redisService.cacheTransferHistory(landId, history, 900);
+
+    return history;
+  }
+
+  async getTransfersByDistrict(
+    district: string,
+    user: User,
+  ): Promise<LandTransfer[]> {
+    // Check permissions
+    if (user.role === UserRole.LAND_OFFICER && user.district !== district) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    // Try to get from cache first
+    const cachedTransfers =
+      await this.redisService.getCachedDistrictTransfers(district);
+    if (cachedTransfers) {
+      return cachedTransfers;
+    }
+
+    const transfers = await this.transferRepository.find({
+      where: { land: { district } },
+      relations: ['currentOwner', 'newOwner', 'land'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Cache for 20 minutes
+    await this.redisService.cacheDistrictTransfers(district, transfers, 1200);
+
+    return transfers;
+  }
+
+  async preloadTransferCaches(): Promise<void> {
+    // Method to preload frequently accessed transfers into cache
+    const recentTransfers = await this.transferRepository.find({
+      where: {},
+      relations: ['currentOwner', 'newOwner', 'land'],
+      order: { createdAt: 'DESC' },
+      take: 100, // Load the most recent 100 transfers
+    });
+
+    await this.redisService.warmTransferCache(recentTransfers);
+  }
+
+  async getCacheHealth(): Promise<any> {
+    return await this.redisService.getCacheStats();
+  }
+
+  // Enhanced update method with cache invalidation
+  private async invalidateRelatedCaches(transfer: LandTransfer): Promise<void> {
+    // Invalidate specific transfer cache
+    await this.redisService.invalidateLandTransfer(transfer.id);
+
+    // Invalidate user caches
+    await this.redisService.invalidateUserTransfers(transfer.currentOwner.id);
+    await this.redisService.invalidateUserTransfers(transfer.newOwner.id);
+
+    // Invalidate transfer history
+    await this.redisService.invalidateTransferHistory(transfer.land.id);
+
+    // Invalidate district cache if applicable
+    if (transfer.land.district) {
+      await this.redisService.invalidateDistrictTransfers(
+        transfer.land.district,
+      );
+    }
+
+    // Invalidate statistics caches (simplified approach)
+    await this.redisService.del(
+      `transfer:stats:${UserRole.CITIZEN}:${transfer.currentOwner.id}`,
+    );
+    await this.redisService.del(
+      `transfer:stats:${UserRole.CITIZEN}:${transfer.newOwner.id}`,
+    );
   }
 }

@@ -9,6 +9,7 @@ import { UrbanizationModule } from './urbanization/urbanization.module';
 import { AuthModule } from './auth/auth.module';
 import { SettingsModule } from './settings/settings.module';
 import { ClickHouseModule } from './clickhouse/clickhouse.module';
+import { RedisModule } from './redis/redis.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -41,6 +42,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     AuthModule,
     SettingsModule,
     ClickHouseModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],

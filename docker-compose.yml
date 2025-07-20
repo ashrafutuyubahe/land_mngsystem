@@ -3,8 +3,8 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server
     ports:
-      - "8123:8123"   
-      - "9000:9000"  
+      - '8123:8123'
+      - '9000:9000'
     ulimits:
       nofile:
         soft: 262144
@@ -12,5 +12,24 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
 
+  redis:
+    image: redis:6
+    ports:
+      - '6379:6379'
+    command: redis-server --requirepass myStrongPassword
+    volumes:
+      - redis-data:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - '5672:5672' # RabbitMQ broker port
+      - '15672:15672' # Web UI (management console)
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+
 volumes:
   clickhouse-data:
+  redis-data:

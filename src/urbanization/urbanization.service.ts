@@ -91,7 +91,7 @@ export class UrbanizationService {
       });
     }
 
-    return await queryBuilder.orderBy('permit.appliedAt', 'DESC').getMany();
+    return await queryBuilder.orderBy('permit.createdAt', 'DESC').getMany();
   }
 
   async findOnePermit(id: string, user: User): Promise<ConstructionPermit> {

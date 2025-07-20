@@ -25,6 +25,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **POST** `/urbanization/permits`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -33,6 +34,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "applicationNumber": "CP-2024-001",
@@ -69,6 +71,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/permits`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -76,6 +79,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Query Parameters:**
+
 - `status` (optional): Filter by status (PENDING, UNDER_REVIEW, APPROVED, REJECTED, EXPIRED)
 - `constructionType` (optional): Filter by type (RESIDENTIAL, COMMERCIAL, INDUSTRIAL, INFRASTRUCTURE)
 - `landId` (optional): Filter by specific land parcel
@@ -85,6 +89,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/permits/{permitId}`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -96,6 +101,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **PATCH** `/urbanization/permits/{permitId}`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -104,6 +110,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "projectDescription": "Updated: Two-story residential building with solar panels",
@@ -123,6 +130,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **POST** `/urbanization/permits/{permitId}/review`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -131,6 +139,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "reviewStatus": "APPROVED",
@@ -150,6 +159,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **POST** `/urbanization/permits/{permitId}/reject`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -158,6 +168,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "rejectionReason": "Architectural plans do not comply with local building codes",
@@ -174,6 +185,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **POST** `/urbanization/permits/{permitId}/cancel`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -182,6 +194,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "cancellationReason": "Project postponed due to funding issues"
@@ -193,6 +206,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/permits/by-land/{landId}`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -204,6 +218,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/permits/by-user/{userId}`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -219,6 +234,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **POST** `/urbanization/inspections`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -227,6 +243,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "permitId": "550e8400-e29b-41d4-a716-446655440001",
@@ -242,6 +259,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/inspections`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -249,6 +267,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Query Parameters:**
+
 - `permitId` (optional): Filter by construction permit
 - `status` (optional): Filter by status (SCHEDULED, IN_PROGRESS, COMPLETED, FAILED)
 - `inspectionType` (optional): Filter by type (FOUNDATION, STRUCTURE, ROOFING, ELECTRICAL, PLUMBING, FINAL)
@@ -258,6 +277,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/inspections/{inspectionId}`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -269,6 +289,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **PATCH** `/urbanization/inspections/{inspectionId}`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -277,6 +298,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "scheduledDate": "2024-04-16T10:00:00.000Z",
@@ -289,6 +311,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **POST** `/urbanization/inspections/{inspectionId}/conduct`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -297,6 +320,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "inspectionResult": "PASSED",
@@ -317,6 +341,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **POST** `/urbanization/inspections/{inspectionId}/fail`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN",
@@ -325,6 +350,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Body (JSON):**
+
 ```json
 {
   "failureReason": "Foundation does not meet structural requirements",
@@ -348,6 +374,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/inspections/by-permit/{permitId}`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -359,6 +386,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/inspections/statistics`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -374,6 +402,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/statistics`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -385,6 +414,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/development-report/{landId}`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -396,6 +426,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 **GET** `/urbanization/activities/by-area`
 
 **Headers:**
+
 ```json
 {
   "Authorization": "Bearer YOUR_JWT_TOKEN"
@@ -403,6 +434,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 **Query Parameters:**
+
 - `district` (optional): Filter by district
 - `sector` (optional): Filter by sector
 - `dateFrom` (optional): Start date filter
@@ -415,6 +447,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ### **Scenario 1: Complete Construction Permit Flow**
 
 1. **Apply for construction permit:**
+
    ```json
    POST /urbanization/permits
    {
@@ -427,6 +460,7 @@ All endpoints require JWT Bearer token with appropriate roles.
    ```
 
 2. **Land officer reviews and approves:**
+
    ```json
    POST /urbanization/permits/{permitId}/review
    {
@@ -437,6 +471,7 @@ All endpoints require JWT Bearer token with appropriate roles.
    ```
 
 3. **Schedule foundation inspection:**
+
    ```json
    POST /urbanization/inspections
    {
@@ -489,6 +524,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ## 📊 **Response Examples**
 
 ### **Construction Permit Response:**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -537,6 +573,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 ### **Inspection Response:**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440001",
@@ -569,6 +606,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 ### **Construction Statistics:**
+
 ```json
 {
   "totalPermits": 245,
@@ -598,22 +636,23 @@ All endpoints require JWT Bearer token with appropriate roles.
 
 ## 🔐 **Role-Based Access**
 
-| Action                    | Citizen              | Land Officer  | District Admin | Inspector |
-|---------------------------|----------------------|---------------|----------------|-----------|
-| Apply for Permit          | ✅ (Own land)        | ✅            | ✅             | ❌        |
-| View Permits              | ✅ (Own only)        | ✅ (District) | ✅ (All)       | ✅        |
-| Update Application        | ✅ (Own, if pending) | ✅            | ✅             | ❌        |
-| Review/Approve Permits    | ❌                   | ✅            | ✅             | ❌        |
-| Cancel Application        | ✅ (Own only)        | ❌            | ❌             | ❌        |
-| Schedule Inspections      | ❌                   | ✅            | ✅             | ✅        |
-| Conduct Inspections       | ❌                   | ❌            | ❌             | ✅        |
-| View Statistics           | ❌                   | ✅            | ✅             | ✅        |
+| Action                 | Citizen              | Land Officer  | District Admin | Inspector |
+| ---------------------- | -------------------- | ------------- | -------------- | --------- |
+| Apply for Permit       | ✅ (Own land)        | ✅            | ✅             | ❌        |
+| View Permits           | ✅ (Own only)        | ✅ (District) | ✅ (All)       | ✅        |
+| Update Application     | ✅ (Own, if pending) | ✅            | ✅             | ❌        |
+| Review/Approve Permits | ❌                   | ✅            | ✅             | ❌        |
+| Cancel Application     | ✅ (Own only)        | ❌            | ❌             | ❌        |
+| Schedule Inspections   | ❌                   | ✅            | ✅             | ✅        |
+| Conduct Inspections    | ❌                   | ❌            | ❌             | ✅        |
+| View Statistics        | ❌                   | ✅            | ✅             | ✅        |
 
 ---
 
 ## ⚠️ **Common Error Responses**
 
 ### **400 - Bad Request:**
+
 ```json
 {
   "statusCode": 400,
@@ -623,6 +662,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 ### **403 - Forbidden:**
+
 ```json
 {
   "statusCode": 403,
@@ -632,6 +672,7 @@ All endpoints require JWT Bearer token with appropriate roles.
 ```
 
 ### **404 - Not Found:**
+
 ```json
 {
   "statusCode": 404,

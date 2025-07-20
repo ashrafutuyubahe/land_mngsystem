@@ -160,7 +160,7 @@ export class UrbanizationController {
   @Roles(UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.SYSTEM_ADMIN)
   async scheduleInspection(
     @Param('id') id: string,
-    @Body() inspectionData: { inspectionType: InspectionType },
+    @Body() inspectionData: ScheduleInspectionDto,
     @Request() req,
   ) {
     return await this.urbanizationService.scheduleInspection(
@@ -193,7 +193,7 @@ export class UrbanizationController {
   @Roles(UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.SYSTEM_ADMIN)
   async conductInspection(
     @Param('inspectionId') inspectionId: string,
-    @Body() inspectionData: { result: InspectionStatus; notes: string },
+    @Body() inspectionData: ConductInspectionDto,
     @Request() req,
   ) {
     return await this.urbanizationService.conductInspection(

@@ -84,7 +84,7 @@ export class UrbanizationService {
       .leftJoinAndSelect('permit.applicant', 'applicant')
       .leftJoinAndSelect('permit.reviewedBy', 'reviewedBy');
 
-    // Apply user-based filtering
+    
     if (user.role === UserRole.CITIZEN) {
       queryBuilder.andWhere('permit.applicant.id = :userId', {
         userId: user.id,
@@ -205,7 +205,7 @@ export class UrbanizationService {
     permit.reviewedAt = new Date();
     permit.reviewedBy = reviewer;
 
-    // If approved, schedule initial inspection
+    // If approved, scheduling initial inspection
     const savedPermit = await this.permitRepository.save(permit);
 
     if (decision === PermitStatus.APPROVED) {

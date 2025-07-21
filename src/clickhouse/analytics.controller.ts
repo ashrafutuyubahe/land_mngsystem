@@ -141,7 +141,7 @@ export class AnalyticsController {
     description: 'Sort order: ASC or DESC (default: DESC)',
   })
   async getLandRecordsAnalytics(@Query() filters: LandAnalyticsFiltersDto) {
-    // Validate and sanitize inputs
+    // Here I'm validating and sanitizing user inputs
     const sanitizedFilters = {
       ...filters,
       page: Math.max(1, parseInt(filters.page?.toString() || '1')),

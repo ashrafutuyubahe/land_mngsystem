@@ -18,8 +18,8 @@ import { UserRole } from '../auth/enums/user-role.enum';
 
 @Injectable()
 export class LandTaxesService {
-  private readonly DEFAULT_TAX_RATE = 0.005; // 0.5%
-  private readonly PENALTY_RATE = 0.02; // 2% per month
+  private readonly DEFAULT_TAX_RATE = 0.005; 
+  private readonly PENALTY_RATE = 0.02;
 
   constructor(
     @InjectRepository(LandTax)
@@ -32,7 +32,7 @@ export class LandTaxesService {
     createLandTaxDto: CreateLandTaxDto,
     user: User,
   ): Promise<LandTax> {
-    // Only authorized personnel can create tax assessments
+    
     if (
       ![
         UserRole.TAX_OFFICER,
@@ -48,7 +48,7 @@ export class LandTaxesService {
 
     const { landId, taxRate, dueDate, ...taxData } = createLandTaxDto;
 
-    // Find the land record
+    
     const land = await this.landRepository.findOne({
       where: { id: landId },
       relations: ['owner'],
@@ -57,7 +57,7 @@ export class LandTaxesService {
       throw new NotFoundException('Land record not found');
     }
 
-    // Check if tax already exists for this land and year
+    
     const existingTax = await this.taxRepository.findOne({
       where: { land: { id: landId }, taxYear: taxData.taxYear },
     });
@@ -67,11 +67,11 @@ export class LandTaxesService {
       );
     }
 
-    // Calculate tax amount
+   
     const finalTaxRate = taxRate || this.DEFAULT_TAX_RATE;
     const taxAmount = taxData.assessedValue * finalTaxRate;
 
-    // Set due date (default: end of tax year)
+    
     const finalDueDate = dueDate
       ? new Date(dueDate)
       : new Date(taxData.taxYear, 11, 31);
@@ -98,7 +98,7 @@ export class LandTaxesService {
       .leftJoinAndSelect('tax.land', 'land')
       .leftJoinAndSelect('land.owner', 'owner');
 
-    // Apply filters
+    // applying filters
     if (year) {
       query.andWhere('tax.taxYear = :year', { year });
     }
@@ -106,7 +106,7 @@ export class LandTaxesService {
       query.andWhere('tax.status = :status', { status });
     }
 
-    // Apply user-based filtering
+    // applying user-based filtering
     if (user.role === UserRole.CITIZEN) {
       query.andWhere('owner.id = :userId', { userId: user.id });
     } else if (
@@ -115,7 +115,7 @@ export class LandTaxesService {
     ) {
       query.andWhere('land.district = :district', { district: user.district });
     }
-    // Admins can see all
+
 
     return query.orderBy('tax.dueDate', 'ASC').getMany();
   }
@@ -130,7 +130,7 @@ export class LandTaxesService {
       throw new NotFoundException('Tax record not found');
     }
 
-    // Check access permissions
+    
     if (user.role === UserRole.CITIZEN && tax.land.owner.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
@@ -143,7 +143,7 @@ export class LandTaxesService {
       throw new ForbiddenException('Access denied');
     }
 
-    // Calculate penalties if overdue
+    //calculating penalties if overdue
     await this.calculatePenalties(tax);
 
     return tax;
@@ -170,7 +170,7 @@ export class LandTaxesService {
 
     const tax = await this.findOne(id, user);
 
-    // Recalculate tax amount if assessed value or rate changed
+    // recalculate tax amount if assessed value or rate changed
     if (updateLandTaxDto.assessedValue || updateLandTaxDto.taxRate) {
       const assessedValue = updateLandTaxDto.assessedValue || tax.assessedValue;
       const taxRate = updateLandTaxDto.taxRate || tax.taxRate;
@@ -188,13 +188,13 @@ export class LandTaxesService {
   ): Promise<LandTax> {
     const tax = await this.findOne(id, user);
 
-    // Update payment information
+    // Update payment infos
     const newPaidAmount = tax.paidAmount + paymentDto.paidAmount;
     tax.paidAmount = newPaidAmount;
     tax.paymentReference = paymentDto.paymentReference;
     tax.paidDate = new Date();
 
-    // Update status based on payment
+    // updating status based on payment
     const totalDue = tax.taxAmount + tax.penaltyAmount;
     if (newPaidAmount >= totalDue) {
       tax.status = TaxStatus.PAID;
@@ -202,7 +202,7 @@ export class LandTaxesService {
       tax.status = TaxStatus.PARTIAL;
     }
 
-    // Add payment notes
+    // added payment notes
     if (paymentDto.notes) {
       tax.notes = tax.notes
         ? `${tax.notes}\n${paymentDto.notes}`
@@ -255,7 +255,7 @@ export class LandTaxesService {
 
     for (const land of landRecords) {
       try {
-        // Check if tax already exists
+        
         const existingTax = await this.taxRepository.findOne({
           where: { land: { id: land.id }, taxYear },
         });
@@ -267,7 +267,7 @@ export class LandTaxesService {
           continue;
         }
 
-        // Use government value or market value for assessment
+        
         const assessedValue = land.governmentValue || land.marketValue || 0;
         if (assessedValue <= 0) {
           errors.push(`No valid assessed value for land ${land.parcelNumber}`);
@@ -310,7 +310,7 @@ export class LandTaxesService {
         statuses: [TaxStatus.PENDING, TaxStatus.PARTIAL],
       });
 
-    // Apply user-based filtering
+    // applying user-based filtering
     if (user.role === UserRole.CITIZEN) {
       query.andWhere('owner.id = :userId', { userId: user.id });
     } else if (
@@ -322,7 +322,7 @@ export class LandTaxesService {
 
     const overdueTaxes = await query.getMany();
 
-    // Calculate penalties for each overdue tax
+    // Calculating penalties for each overdue tax
     for (const tax of overdueTaxes) {
       await this.calculatePenalties(tax);
     }
@@ -339,7 +339,7 @@ export class LandTaxesService {
       query.where('tax.taxYear = :year', { year });
     }
 
-    // Apply user-based filtering
+    
     if (user.role === UserRole.CITIZEN) {
       query.andWhere('land.owner.id = :userId', { userId: user.id });
     } else if (
@@ -369,7 +369,7 @@ export class LandTaxesService {
           .getCount(),
       ]);
 
-    // Calculate revenue statistics
+    // Calculating revenue statistics
     const revenueQuery = this.taxRepository
       .createQueryBuilder('tax')
       .select([
@@ -383,7 +383,7 @@ export class LandTaxesService {
       revenueQuery.where('tax.taxYear = :year', { year });
     }
 
-    // Apply same user filtering for revenue
+
     if (user.role === UserRole.CITIZEN) {
       revenueQuery.andWhere('land.owner.id = :userId', { userId: user.id });
     } else if (
@@ -456,7 +456,7 @@ export class LandTaxesService {
 
     const now = new Date();
     if (now > tax.dueDate) {
-      // Mark as overdue
+      
       if (
         tax.status === TaxStatus.PENDING ||
         tax.status === TaxStatus.PARTIAL
@@ -464,7 +464,7 @@ export class LandTaxesService {
         tax.status = TaxStatus.OVERDUE;
       }
 
-      // Calculate penalty (2% per month overdue)
+      // calculating penalty ( assummed 2% per month overdue)
       const monthsOverdue = Math.ceil(
         (now.getTime() - tax.dueDate.getTime()) / (1000 * 60 * 60 * 24 * 30),
       );

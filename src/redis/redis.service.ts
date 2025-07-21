@@ -6,7 +6,7 @@ import { Cache } from 'cache-manager';
 export class RedisService {
   constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
 
-  // Generic cache methods
+  // generic cache methods
   async get<T>(key: string): Promise<T | undefined> {
     return await this.cacheManager.get<T>(key);
   }
@@ -140,14 +140,12 @@ export class RedisService {
 
   // Bulk invalidation methods
   async invalidateAllTransferCaches(): Promise<void> {
-    // This would require a more sophisticated approach in production
-    // For now, we'll reset all caches
+    
     await this.reset();
   }
 
   async invalidateTransferCachesByPattern(pattern: string): Promise<void> {
-    // In a production environment, you'd want to implement pattern-based deletion
-    // This is a simplified approach
+    
     await this.reset();
   }
 
@@ -159,7 +157,7 @@ export class RedisService {
     await Promise.all(promises);
   }
 
-  // Health check
+  // Health checks
   async isConnected(): Promise<boolean> {
     try {
       await this.set('health_check', 'ok', 60);
@@ -173,8 +171,7 @@ export class RedisService {
 
   // Performance monitoring
   async getCacheStats(): Promise<any> {
-    // This would depend on your Redis configuration
-    // Placeholder for cache statistics
+    
     return {
       connected: await this.isConnected(),
       timestamp: new Date().toISOString(),

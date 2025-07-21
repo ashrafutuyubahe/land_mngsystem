@@ -35,7 +35,7 @@ export class ConflictResolutionService {
     createConflictDto: CreateConflictDto,
     reportedBy: User,
   ): Promise<Conflict> {
-    // Verify land record exists
+    // checkings land record exists
     const landRecord = await this.landRecordRepository.findOne({
       where: { id: createConflictDto.landRecordId },
     });
@@ -44,7 +44,7 @@ export class ConflictResolutionService {
       throw new NotFoundException('Land record not found');
     }
 
-    // Check if user has permission to report conflict on this land
+    // Check user permisions
     if (
       reportedBy.role === UserRole.CITIZEN &&
       landRecord.ownerId !== reportedBy.id
@@ -76,14 +76,14 @@ export class ConflictResolutionService {
       .leftJoinAndSelect('conflict.reportedBy', 'reportedBy')
       .leftJoinAndSelect('conflict.assignedTo', 'assignedTo');
 
-    // Apply user-based filtering
+    // appling user-based filtering
     if (user.role === UserRole.CITIZEN) {
       queryBuilder.andWhere('conflict.reportedBy.id = :userId', {
         userId: user.id,
       });
     }
 
-    // Apply filters
+    // appling filters for performance
     if (filters.conflictType) {
       queryBuilder.andWhere('conflict.conflictType = :conflictType', {
         conflictType: filters.conflictType,
@@ -137,7 +137,7 @@ export class ConflictResolutionService {
       throw new NotFoundException('Conflict not found');
     }
 
-    // Check permissions
+    // Checking user permissions
     if (user.role === UserRole.CITIZEN && conflict.reportedBy.id !== user.id) {
       throw new ForbiddenException('You can only view your own conflicts');
     }
@@ -152,17 +152,17 @@ export class ConflictResolutionService {
   ): Promise<Conflict> {
     const conflict = await this.findOne(id, user);
 
-    // Citizens can only update certain fields and only for their own conflicts
+    // logical validation (citizen spefiic data update)
     if (user.role === UserRole.CITIZEN) {
       if (conflict.reportedBy.id !== user.id) {
         throw new ForbiddenException('You can only update your own conflicts');
       }
 
-      // Citizens cannot update status or resolution notes
+ 
       const { status, resolutionNotes, ...allowedUpdates } = updateConflictDto;
       Object.assign(conflict, allowedUpdates);
     } else {
-      // Officials can update all fields
+      
       Object.assign(conflict, updateConflictDto);
 
       if (
@@ -182,7 +182,7 @@ export class ConflictResolutionService {
     assignDto: AssignConflictDto,
     user: User,
   ): Promise<Conflict> {
-    // Only land officers and above can assign conflicts
+    // logical validation (land officers spefiic previlege)
     if (
       ![
         UserRole.LAND_OFFICER,
@@ -212,7 +212,7 @@ export class ConflictResolutionService {
       throw new NotFoundException('Officer not found');
     }
 
-    // Verify the officer has appropriate role
+    // verifying the officer has appropriate role
     if (
       ![UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN].includes(officer.role)
     ) {
@@ -232,7 +232,7 @@ export class ConflictResolutionService {
   async getStatistics(user: User): Promise<any> {
     const baseQuery = this.conflictRepository.createQueryBuilder('conflict');
 
-    // Apply user-based filtering
+    // filters
     if (user.role === UserRole.CITIZEN) {
       baseQuery.andWhere('conflict.reportedBy.id = :userId', {
         userId: user.id,
@@ -327,7 +327,7 @@ export class ConflictResolutionService {
         resolvedStatus: ConflictStatus.RESOLVED,
       });
 
-    // Apply user-based filtering
+    // filters for performance
     if (user.role === UserRole.CITIZEN) {
       queryBuilder.andWhere('conflict.reportedBy.id = :userId', {
         userId: user.id,

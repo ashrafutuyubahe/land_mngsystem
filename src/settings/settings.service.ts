@@ -208,7 +208,7 @@ export class SettingsService {
       throw new ForbiddenException('Only administrators can create workflows');
     }
 
-    // If this is set as default, update existing default workflow
+    // If this is set as default, updating existing default workflow
     if (createDto.isDefault) {
       await this.workflowRepository.update(
         { module: createDto.module, isDefault: true },
@@ -536,8 +536,7 @@ export class SettingsService {
       );
     }
 
-    // This would reset all settings to default values
-    // Implementation would depend on your default configuration
+    
     throw new BadRequestException('Reset to defaults not yet implemented');
   }
 
@@ -565,7 +564,7 @@ export class SettingsService {
       }
     }
 
-    // Check for default workflows for each module
+    // Checking for default workflows for each module
     const modules = [
       'land_registration',
       'conflict_resolution',

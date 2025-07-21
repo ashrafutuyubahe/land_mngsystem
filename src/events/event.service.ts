@@ -2,7 +2,7 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { Observable } from 'rxjs';
 
-// Event Types for Land Administration
+// event types for Land Administration
 export enum LandEventType {
   // Land Registration Events
   LAND_REGISTERED = 'land.registered',
@@ -30,16 +30,16 @@ export enum LandEventType {
   PERMIT_INSPECTION_SCHEDULED = 'permit.inspection.scheduled',
   PERMIT_INSPECTION_COMPLETED = 'permit.inspection.completed',
 
-  // Tax Events
+  // tax Events
   TAX_ASSESSED = 'tax.assessed',
   TAX_PAYMENT_RECEIVED = 'tax.payment.received',
   TAX_OVERDUE = 'tax.overdue',
 
-  // User Events
+  // user Events
   USER_REGISTERED = 'user.registered',
   USER_ROLE_CHANGED = 'user.role.changed',
 
-  // System Events
+  // system Events
   BULK_SYNC_STARTED = 'system.bulk.sync.started',
   BULK_SYNC_COMPLETED = 'system.bulk.sync.completed',
   DATA_EXPORT_REQUESTED = 'system.data.export.requested',
@@ -80,7 +80,7 @@ export class EventService {
     await this.eventClient.close();
   }
 
-  // Generic event publishing method
+  // generic event publishing 
   async publishEvent(event: LandEvent): Promise<void> {
     try {
       const enrichedEvent: LandEvent = {
@@ -104,7 +104,7 @@ export class EventService {
     }
   }
 
-  // Land Registration Events
+  // land Registration Events
   async publishLandRegistered(landRecord: any, userId: string): Promise<void> {
     await this.publishEvent({
       type: LandEventType.LAND_REGISTERED,
@@ -290,7 +290,7 @@ export class EventService {
     });
   }
 
-  // Construction Permit Events
+  // construction Permit Events
   async publishPermitApplied(permit: any, userId: string): Promise<void> {
     await this.publishEvent({
       type: LandEventType.PERMIT_APPLIED,
@@ -348,7 +348,7 @@ export class EventService {
         operation,
         processedRecords,
         errorCount: errors.length,
-        errors: errors.slice(0, 10), // Only include first 10 errors
+        errors: errors.slice(0, 10), // onlyy including first 10 erroes
         completedBy: userId,
         completedAt: new Date(),
       },
@@ -361,15 +361,15 @@ export class EventService {
     });
   }
 
-  // Utility methods
+  
   private generateEventId(): string {
     return `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // Health check method
+  // Health checks
   async checkHealth(): Promise<boolean> {
     try {
-      // Simple health check - try to emit a test event
+     
       this.eventClient.emit('health.check', {
         timestamp: new Date(),
         service: 'land-admin-api',
@@ -381,13 +381,13 @@ export class EventService {
     }
   }
 
-  // Get event statistics
+  // getting event statistics
   async getEventStats(): Promise<any> {
-    // This would typically query your event store or metrics system
+    
     return {
       connected: true,
       timestamp: new Date(),
-      // In a real implementation, you'd get these from RabbitMQ management API
+      // further with a real implementation, I'll get this from rabbitmq
       totalEvents: 0,
       queueStatus: 'active',
     };

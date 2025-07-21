@@ -33,7 +33,7 @@ export class LandRegistrationService {
     createLandRecordDto: CreateLandRecordDto,
     owner: User,
   ): Promise<LandRecord> {
-    // Check if parcel number already exists
+   
     const existingParcel = await this.landRecordRepository.findOne({
       where: { parcelNumber: createLandRecordDto.parcelNumber },
     });
@@ -41,7 +41,7 @@ export class LandRegistrationService {
       throw new ForbiddenException('Parcel number already exists');
     }
 
-    // Check if UPI number already exists
+    
     const existingUpi = await this.landRecordRepository.findOne({
       where: { upiNumber: createLandRecordDto.upiNumber },
     });
@@ -58,12 +58,12 @@ export class LandRegistrationService {
 
     const savedRecord = await this.landRecordRepository.save(landRecord);
 
-    // Sync to ClickHouse for analytics (async, don't block the response)
+    // Syncing to clickHouse for analytics
     this.syncToClickHouse(savedRecord).catch((error) => {
       this.logger.error('Failed to sync land record to ClickHouse:', error);
     });
 
-    // Publish land registration event to RabbitMQ
+    // publishig land registration event to RabbitMQ
     try {
       await this.eventService.publishLandRegistered(savedRecord, owner.id);
       this.logger.log(
@@ -81,15 +81,15 @@ export class LandRegistrationService {
       .createQueryBuilder('land')
       .leftJoinAndSelect('land.owner', 'owner');
 
-    // Citizens can only see their own land records
+    
     if (user.role === UserRole.CITIZEN) {
       query.where('land.owner.id = :userId', { userId: user.id });
     }
-    // Land officers can see all records in their district
+    
     else if (user.role === UserRole.LAND_OFFICER) {
       query.where('land.district = :district', { district: user.district });
     }
-    // Admins can see all records
+    
 
     return query.getMany();
   }
@@ -104,7 +104,6 @@ export class LandRegistrationService {
       throw new NotFoundException('Land record not found');
     }
 
-    // Check access permissions
     if (user.role === UserRole.CITIZEN && landRecord.owner.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
@@ -126,7 +125,7 @@ export class LandRegistrationService {
   ): Promise<LandRecord> {
     const landRecord = await this.findOne(id, user);
 
-    // Only allow updates if pending or by authorized personnel
+    
     if (
       landRecord.status !== LandStatus.PENDING &&
       user.role === UserRole.CITIZEN
@@ -138,7 +137,7 @@ export class LandRegistrationService {
     Object.assign(landRecord, updateLandRecordDto);
     const updatedRecord = await this.landRecordRepository.save(landRecord);
 
-    // Publish land updated event to RabbitMQ
+    // publishing land updated event to rabbitMQ
     try {
       await this.eventService.publishLandUpdated(
         updatedRecord,
@@ -186,7 +185,7 @@ export class LandRegistrationService {
 
     const approvedRecord = await this.landRecordRepository.save(landRecord);
 
-    // Publish land status changed event to RabbitMQ
+    // publishing land status changed event to RabbitMQ
     try {
       await this.eventService.publishLandStatusChanged(
         approvedRecord,
@@ -227,7 +226,7 @@ export class LandRegistrationService {
 
     const rejectedRecord = await this.landRecordRepository.save(landRecord);
 
-    // Publish land status changed event to RabbitMQ
+    // publish land status changed event to RabbitMQ
     try {
       await this.eventService.publishLandStatusChanged(
         rejectedRecord,
@@ -248,7 +247,7 @@ export class LandRegistrationService {
   async remove(id: string, user: User): Promise<void> {
     const landRecord = await this.findOne(id, user);
 
-    // Only allow deletion if pending and by owner or authorized personnel
+    //  allowing only deletion if pending and by owner or authorized personnel
     if (
       landRecord.status !== LandStatus.PENDING &&
       user.role === UserRole.CITIZEN
@@ -266,7 +265,7 @@ export class LandRegistrationService {
     });
   }
 
-  // ClickHouse Analytics Integration
+  // clickHouse analytics integration
   private async syncToClickHouse(landRecord: LandRecord): Promise<void> {
     try {
       const analyticsRecord: LandRecordAnalytics = {
@@ -288,7 +287,7 @@ export class LandRegistrationService {
         lng: landRecord.coordinates?.longitude,
         estimated_value: landRecord.marketValue,
         land_type: landRecord.landUseType,
-        tenure_type: 'FREEHOLD', // Default value, can be extended later
+        tenure_type: 'FREEHOLD', 
       };
 
       await this.clickHouseService.syncLandRecord(analyticsRecord);
@@ -301,7 +300,7 @@ export class LandRegistrationService {
     }
   }
 
-  // High-performance findAll using ClickHouse for large datasets
+  //  performant findall methods using clickhouse
   async findAllAnalytics(
     user: User,
     filters: {
@@ -325,11 +324,11 @@ export class LandRegistrationService {
     source: 'clickhouse' | 'postgres';
   }> {
     try {
-      // Apply user-based filtering
+      
       const userFilters = { ...filters };
 
       if (user.role === UserRole.CITIZEN) {
-        // Citizens can only see their own records - we need to get from PostgreSQL
+        
         const records = await this.findAll(user);
         return {
           data: records.map((record) => this.transformToAnalytics(record)),
@@ -342,7 +341,7 @@ export class LandRegistrationService {
         userFilters.district = user.district;
       }
 
-      // Use ClickHouse for high-performance analytics
+      // Using clickHouse for high-performance analytics
       const result =
         await this.clickHouseService.getLandRecordsAnalytics(userFilters);
 
@@ -356,7 +355,7 @@ export class LandRegistrationService {
         error,
       );
 
-      // Fallback to PostgreSQL
+      
       const records = await this.findAll(user);
       return {
         data: records.map((record) => this.transformToAnalytics(record)),
@@ -388,11 +387,11 @@ export class LandRegistrationService {
       lng: record.coordinates?.longitude,
       estimated_value: record.marketValue,
       land_type: record.landUseType,
-      tenure_type: 'FREEHOLD', // Default value, can be extended later
+      tenure_type: 'FREEHOLD',
     };
   }
 
-  // Bulk sync all existing records to ClickHouse
+  // bulk syncing all existing records
   async bulkSyncToClickHouse(): Promise<{ synced: number; errors: number }> {
     try {
       this.logger.log('Starting bulk sync of land records to ClickHouse...');

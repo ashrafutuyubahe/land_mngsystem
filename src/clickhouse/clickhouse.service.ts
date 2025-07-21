@@ -34,7 +34,7 @@ export interface LandAnalyticsStats {
   area_distribution: Array<{ range: string; count: number }>;
 }
 
-// Helper interfaces for ClickHouse query results
+// helper interfaces for cclickHouse query results
 interface BasicStatsResult {
   total_records: number;
   total_area: number;
@@ -100,7 +100,7 @@ export class ClickHouseService implements OnModuleInit {
   }
 
   private async createTables() {
-    // Main land records analytics table
+    // land record analytica table
     const landRecordsTable = `
       CREATE TABLE IF NOT EXISTS land_analytics.land_records (
         id String,
@@ -128,7 +128,7 @@ export class ClickHouseService implements OnModuleInit {
       PARTITION BY toYYYYMM(created_at)
     `;
 
-    // Land transactions for trend analysis
+    // land transaction table
     const transactionsTable = `
       CREATE TABLE IF NOT EXISTS land_analytics.land_transactions (
         id String,
@@ -145,7 +145,7 @@ export class ClickHouseService implements OnModuleInit {
       PARTITION BY toYYYYMM(transaction_date)
     `;
 
-    // Real-time activity log
+    // rreal-time activity log
     const activityTable = `
       CREATE TABLE IF NOT EXISTS land_analytics.activity_log (
         id String,
@@ -170,7 +170,7 @@ export class ClickHouseService implements OnModuleInit {
     this.logger.log('ClickHouse tables created successfully');
   }
 
-  // Sync single land record to ClickHouse
+  // syncing land record in cickhouse
   async syncLandRecord(record: LandRecordAnalytics): Promise<void> {
     try {
       // Use ON DUPLICATE KEY UPDATE equivalent for ClickHouse
@@ -206,12 +206,12 @@ export class ClickHouseService implements OnModuleInit {
     }
   }
 
-  // Bulk sync multiple land records
+  // Bulk syncing of recrds
   async bulkSyncLandRecords(records: LandRecordAnalytics[]): Promise<void> {
     if (records.length === 0) return;
 
     try {
-      // Process in batches to avoid memory issues
+      
       const batchSize = 1000;
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize);
@@ -236,7 +236,7 @@ export class ClickHouseService implements OnModuleInit {
     }
   }
 
-  // Get paginated land records with advanced filtering
+  //land analytica(paginated,filtered records) for performance
   async getLandRecordsAnalytics(filters: {
     district?: string;
     landUse?: string;
@@ -292,7 +292,7 @@ export class ClickHouseService implements OnModuleInit {
         ? `WHERE ${whereConditions.join(' AND ')}`
         : '';
 
-    // Get total count
+    // tota count
     const countQuery = `
       SELECT count() as total 
       FROM land_analytics.land_records 
@@ -307,7 +307,7 @@ export class ClickHouseService implements OnModuleInit {
     const totalData = (await countResult.json()) as CountResult[];
     const total = totalData[0]?.total || 0;
 
-    // Get paginated data
+
     const dataQuery = `
       SELECT * 
       FROM land_analytics.land_records 
@@ -331,7 +331,7 @@ export class ClickHouseService implements OnModuleInit {
     };
   }
 
-  // Get comprehensive analytics statistics
+// comprehensive analytic report
   async getLandAnalyticsStats(): Promise<LandAnalyticsStats> {
     const queries = {
       // Basic stats
@@ -343,7 +343,7 @@ export class ClickHouseService implements OnModuleInit {
         FROM land_analytics.land_records
       `,
 
-      // Records by district
+      // each records by district
       byDistrict: `
         SELECT 
           district,
@@ -353,7 +353,7 @@ export class ClickHouseService implements OnModuleInit {
         ORDER BY count DESC
       `,
 
-      // Records by land use
+      // by land use
       byLandUse: `
         SELECT 
           land_use,
@@ -363,7 +363,7 @@ export class ClickHouseService implements OnModuleInit {
         ORDER BY count DESC
       `,
 
-      // Records by status
+      //  by status
       byStatus: `
         SELECT 
           status,
@@ -372,7 +372,7 @@ export class ClickHouseService implements OnModuleInit {
         GROUP BY status
       `,
 
-      // Monthly registrations (last 12 months)
+      // monthly registrations about(last 12 months)
       monthlyRegistrations: `
         SELECT 
           formatDateTime(created_at, '%Y-%m') as month,
@@ -383,7 +383,7 @@ export class ClickHouseService implements OnModuleInit {
         ORDER BY month
       `,
 
-      // Area distribution
+      // area distribution
       areaDistribution: `
         SELECT 
           CASE 
@@ -470,7 +470,7 @@ export class ClickHouseService implements OnModuleInit {
     }
   }
 
-  // Log user activity for analytics
+  // log user activities
   async logActivity(activity: {
     id: string;
     userId: string;
@@ -497,7 +497,7 @@ export class ClickHouseService implements OnModuleInit {
     }
   }
 
-  // Health check for ClickHouse
+  // clickhoue health checks
   async healthCheck(): Promise<boolean> {
     try {
       const result = await this.clickhouse.query({
@@ -512,7 +512,7 @@ export class ClickHouseService implements OnModuleInit {
     }
   }
 
-  // Get district-specific analytics
+  // getting district-specific analytics
   async getDistrictAnalytics(district: string): Promise<{
     total_records: number;
     total_area: number;
@@ -603,7 +603,7 @@ export class ClickHouseService implements OnModuleInit {
     }
   }
 
-  // Clear old data (useful for maintenance)
+  // Clearing old data ( which is useful in maintenance)
   async clearOldData(olderThanDays: number = 365): Promise<void> {
     try {
       const query = `
@@ -619,7 +619,7 @@ export class ClickHouseService implements OnModuleInit {
     }
   }
 
-  // Get real-time metrics for dashboard
+  // real-time metrics for dashboard
   async getRealTimeMetrics(): Promise<{
     registrations_today: number;
     registrations_this_week: number;

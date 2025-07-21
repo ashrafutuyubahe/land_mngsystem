@@ -44,7 +44,7 @@ export class LandTransferService {
       throw new BadRequestException('Transfer number already exists');
     }
 
-    // Find the land record
+    
     const land = await this.landRepository.findOne({
       where: { id: landId },
       relations: ['owner'],
@@ -77,7 +77,7 @@ export class LandTransferService {
       );
     }
 
-    // Find the new owner
+    
     const newOwner = await this.userRepository.findOne({
       where: { id: newOwnerId },
     });
@@ -85,12 +85,12 @@ export class LandTransferService {
       throw new NotFoundException('New owner not found');
     }
 
-    // Prevent self-transfer
+    // preventing self-transfer
     if (land.owner.id === newOwnerId) {
       throw new BadRequestException('Cannot transfer land to the same owner');
     }
 
-    // Calculate tax amount if not provided (example: 5% of transfer value)
+    // calculating tax amount
     const taxAmount =
       transferData.taxAmount || transferData.transferValue * 0.05;
 
@@ -121,7 +121,7 @@ export class LandTransferService {
     await this.redisService.invalidateUserTransfers(newOwnerId);
     await this.redisService.invalidateTransferHistory(landId);
 
-    // Invalidate district-based caches if land has district info
+    // Invalidate district-based caches if land has district infos
     if (land.district) {
       await this.redisService.invalidateDistrictTransfers(land.district);
     }
@@ -169,10 +169,10 @@ export class LandTransferService {
   }
 
   async findOne(id: string, user: User): Promise<LandTransfer> {
-    // Try to get from cache first
+    // getting from cache from cache first
     const cachedTransfer = await this.redisService.getCachedLandTransfer(id);
     if (cachedTransfer) {
-      // Still need to check permissions for cached data
+      //  checking permissions for cached data
       if (user.role === UserRole.CITIZEN) {
         if (
           cachedTransfer.currentOwner.id !== user.id &&
@@ -231,7 +231,7 @@ export class LandTransferService {
   ): Promise<LandTransfer> {
     const transfer = await this.findOne(id, user);
 
-    // Only allow updates if transfer is initiated or pending
+    
     if (
       ![TransferStatus.INITIATED, TransferStatus.PENDING_APPROVAL].includes(
         transfer.status,
@@ -349,7 +349,7 @@ export class LandTransferService {
   async cancel(id: string, user: User): Promise<LandTransfer> {
     const transfer = await this.findOne(id, user);
 
-    // Only current owner can cancel
+    // only current owner can cancel
     if (transfer.currentOwner.id !== user.id) {
       throw new ForbiddenException(
         'Only the current owner can cancel the transfer',
@@ -368,7 +368,7 @@ export class LandTransferService {
 
     transfer.status = TransferStatus.CANCELLED;
 
-    // Restore land status
+    // restoring land status
     const land = await this.landRepository.findOne({
       where: { id: transfer.land.id },
     });
@@ -406,7 +406,7 @@ export class LandTransferService {
   }
 
   async findByUser(userId: string): Promise<LandTransfer[]> {
-    // Try to get from cache first
+    // trying to get from cache first
     const cachedTransfers =
       await this.redisService.getCachedUserTransfers(userId);
     if (cachedTransfers) {
@@ -429,7 +429,7 @@ export class LandTransferService {
     // Create cache key based on user role and ID
     const cacheKey = `transfer:stats:${user.role}:${user.id}`;
 
-    // Try to get from cache first
+    // trying to get from cache first
     const cachedStats = await this.redisService.get(cacheKey);
     if (cachedStats) {
       return cachedStats;
@@ -488,13 +488,13 @@ export class LandTransferService {
       cancelled,
     };
 
-    // Cache the statistics for 15 minutes
+    // caching the statistics for 15 minutes
     await this.redisService.set(cacheKey, stats, 900);
 
     return stats;
   }
 
-  // Additional Redis-optimized methods
+  //  Redis-optimized methods
   async getTransferHistory(
     landId: string,
     user: User,
@@ -513,7 +513,7 @@ export class LandTransferService {
       throw new ForbiddenException('Access denied');
     }
 
-    // Try to get from cache first
+    // trying to get from cache first
     const cachedHistory =
       await this.redisService.getCachedTransferHistory(landId);
     if (cachedHistory) {
@@ -536,12 +536,12 @@ export class LandTransferService {
     district: string,
     user: User,
   ): Promise<LandTransfer[]> {
-    // Check permissions
+    // checkinguser permissions
     if (user.role === UserRole.LAND_OFFICER && user.district !== district) {
       throw new ForbiddenException('Access denied');
     }
 
-    // Try to get from cache first
+    // trying to get from cache first
     const cachedTransfers =
       await this.redisService.getCachedDistrictTransfers(district);
     if (cachedTransfers) {
@@ -561,7 +561,7 @@ export class LandTransferService {
   }
 
   async preloadTransferCaches(): Promise<void> {
-    // Method to preload frequently accessed transfers into cache
+    // method to preload frequently accessed transfers into cache
     const recentTransfers = await this.transferRepository.find({
       where: {},
       relations: ['currentOwner', 'newOwner', 'land'],
@@ -576,7 +576,7 @@ export class LandTransferService {
     return await this.redisService.getCacheStats();
   }
 
-  // Enhanced update method with cache invalidation
+  // enhanced update method with cache invalidation
   private async invalidateRelatedCaches(transfer: LandTransfer): Promise<void> {
     // Invalidate specific transfer cache
     await this.redisService.invalidateLandTransfer(transfer.id);
@@ -595,7 +595,7 @@ export class LandTransferService {
       );
     }
 
-    // Invalidate statistics caches (simplified approach)
+    // Invalidate statistics caches (that's simplified approach)
     await this.redisService.del(
       `transfer:stats:${UserRole.CITIZEN}:${transfer.currentOwner.id}`,
     );

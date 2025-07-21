@@ -48,10 +48,10 @@ export class Inspection {
   recommendations: string;
 
   @Column('text', { nullable: true })
-  deficiencies: string; // Issues found during inspection
+  deficiencies: string; 
 
   @Column('text', { nullable: true })
-  photos: string; // JSON array of photo URLs
+  photos: string;
 
   @Column({ nullable: true })
   nextInspectionDate: Date;

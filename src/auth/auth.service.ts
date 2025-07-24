@@ -22,7 +22,7 @@ export class AuthService {
   async register(createUserDto: CreateUserDto) {
     const { email, password, nationalId, ...userData } = createUserDto;
 
-  
+    // Check if user with email already exists
     const existingUserByEmail = await this.userRepository.findOne({
       where: { email },
     });
@@ -30,7 +30,7 @@ export class AuthService {
       throw new ConflictException('User with this email already exists');
     }
 
-    //checking if user with natId already present
+    // Check if user with nationalId already exists (if nationalId is provided)
     if (nationalId) {
       const existingUserByNationalId = await this.userRepository.findOne({
         where: { nationalId },
@@ -44,7 +44,7 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-   
+    // Create user
     const user = this.userRepository.create({
       email,
       password: hashedPassword,
@@ -53,7 +53,7 @@ export class AuthService {
 
     const savedUser = await this.userRepository.save(user);
 
-    
+    // Return user without password
     const { password: _, ...userWithoutPassword } = savedUser;
     return {
       message: 'User registered successfully',
@@ -64,27 +64,28 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
- 
+    // Find user with password
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    
+    // Check password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    
+    // Check if user is active
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-   
+    // Generate JWT token
     const payload = { sub: user.id, email: user.email, role: user.role };
     const token = this.jwtService.sign(payload);
 
+    // Return user without password
     const { password: _, ...userWithoutPassword } = user;
     return {
       user: userWithoutPassword,

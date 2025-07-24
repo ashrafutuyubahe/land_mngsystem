@@ -3,12 +3,23 @@ export enum ConflictType {
   OWNERSHIP_DISPUTE = 'ownership_dispute',
   INHERITANCE_DISPUTE = 'inheritance_dispute',
   ENCROACHMENT = 'encroachment',
-  ILLEGAL_OCCUPATION = 'illegal_occupation',
-  DOCUMENTATION_DISPUTE = 'documentation_dispute',
+  ACCESS_RIGHT = 'access_right',
   EASEMENT_DISPUTE = 'easement_dispute',
-  ZONING_VIOLATION = 'zoning_violation',
-  ENVIRONMENTAL_ISSUE = 'environmental_issue',
+  TAX_DISPUTE = 'tax_dispute',
+  PERMIT_DISPUTE = 'permit_dispute',
   OTHER = 'other',
+}
+
+export enum ConflictStatus {
+  REPORTED = 'reported',
+  ASSIGNED = 'assigned',
+  INVESTIGATING = 'investigating',
+  MEDIATING = 'mediating',
+  HEARING_SCHEDULED = 'hearing_scheduled',
+  RESOLVED = 'resolved',
+  ESCALATED = 'escalated',
+  CLOSED = 'closed',
+  REOPENED = 'reopened',
 }
 
 export enum ConflictPriority {
@@ -18,11 +29,11 @@ export enum ConflictPriority {
   URGENT = 'urgent',
 }
 
-export enum ConflictStatus {
-  REPORTED = 'reported',
-  INVESTIGATING = 'investigating',
-  MEDIATING = 'mediating',
-  RESOLVED = 'resolved',
-  CLOSED = 'closed',
-  ESCALATED = 'escalated',
+export enum ResolutionMethod {
+  MEDIATION = 'mediation',
+  ARBITRATION = 'arbitration',
+  LEGAL_RULING = 'legal_ruling',
+  ADMINISTRATIVE_DECISION = 'administrative_decision',
+  NEGOTIATION = 'negotiation',
+  COURT_ORDER = 'court_order',
 }

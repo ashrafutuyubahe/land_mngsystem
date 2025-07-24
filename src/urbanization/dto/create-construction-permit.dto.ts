@@ -1,113 +1,137 @@
-import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
-  IsNotEmpty,
   IsEnum,
+  IsNumber,
+  IsDateString,
   IsOptional,
   IsUUID,
-  IsNumber,
+  IsArray,
   Min,
-  MaxLength,
-  IsDateString,
+  Max,
+  Length,
 } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ConstructionType } from '../enums/construction.enum';
 
 export class CreateConstructionPermitDto {
   @ApiProperty({
-    description: 'ID of the land record where construction will take place',
-    example: 'e12f8c3a-4b5d-6e7f-8a9b-0c1d2e3f4a5b',
-  })
-  @IsUUID()
-  @IsNotEmpty()
-  landRecordId: string;
-
-  @ApiProperty({
-    description: 'Type of construction',
-    enum: ConstructionType,
-    example: ConstructionType.RESIDENTIAL_HOUSE,
-  })
-  @IsEnum(ConstructionType)
-  @IsNotEmpty()
-  constructionType: ConstructionType;
-
-  @ApiProperty({
-    description: 'Title of the construction project',
-    example: 'Two-story family residence',
-    maxLength: 200,
+    description: 'Project title',
+    example: 'Residential Building Construction',
   })
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(200)
+  @Length(5, 200)
   projectTitle: string;
 
   @ApiProperty({
     description: 'Detailed description of the construction project',
     example:
-      'Construction of a modern two-story family house with 4 bedrooms, 3 bathrooms, and a garage',
+      'Construction of a 3-story residential building with modern amenities',
   })
   @IsString()
-  @IsNotEmpty()
+  @Length(10, 1000)
   description: string;
 
   @ApiProperty({
-    description: 'Estimated construction cost in Rwandan Francs',
-    example: 25000000,
-    minimum: 0,
+    description: 'Type of construction',
+    enum: ConstructionType,
+    example: ConstructionType.RESIDENTIAL,
   })
-  @IsNumber()
-  @Min(0)
+  @IsEnum(ConstructionType)
+  constructionType: ConstructionType;
+
+  @ApiProperty({
+    description: 'Estimated cost of construction in RWF',
+    example: 150000000,
+  })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1000000)
   estimatedCost: number;
 
   @ApiProperty({
-    description: 'Total construction area in square meters',
-    example: 150.5,
-    minimum: 0,
+    description: 'Construction area in square meters',
+    example: 250.5,
   })
-  @IsNumber()
-  @Min(0)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(10)
   constructionArea: number;
 
+  @ApiPropertyOptional({
+    description: 'Number of floors',
+    example: 3,
+    default: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(50)
+  numberOfFloors?: number;
+
+  @ApiPropertyOptional({
+    description: 'Contractor name/company',
+    example: 'ABC Construction Ltd',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(2, 100)
+  contractor?: string;
+
+  @ApiPropertyOptional({
+    description: 'Architect name/company',
+    example: 'XYZ Architects',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(2, 100)
+  architect?: string;
+
+  @ApiPropertyOptional({
+    description: 'Technical specifications',
+    example: 'Reinforced concrete structure with steel framework',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(10, 2000)
+  technicalSpecs?: string;
+
   @ApiProperty({
-    description: 'Planned start date for construction',
+    description: 'Planned start date',
     example: '2024-03-01',
   })
   @IsDateString()
-  @IsNotEmpty()
   plannedStartDate: string;
 
   @ApiProperty({
-    description: 'Planned completion date for construction',
+    description: 'Planned completion date',
     example: '2024-12-31',
   })
   @IsDateString()
-  @IsNotEmpty()
   plannedCompletionDate: string;
 
   @ApiProperty({
-    description: 'Name of the contractor or construction company',
-    required: false,
-    example: 'Rwanda Construction Ltd',
+    description: 'Land record ID associated with this permit',
+    example: 'uuid-land-record-id',
   })
-  @IsString()
-  @IsOptional()
-  contractor?: string;
+  @IsUUID()
+  landRecordId: string;
 
-  @ApiProperty({
-    description: 'Architect or engineer details',
-    required: false,
-    example: 'John Doe, Licensed Architect (License #12345)',
+  @ApiPropertyOptional({
+    description: 'Array of document URLs',
+    example: [
+      'https://example.com/blueprint.pdf',
+      'https://example.com/survey.pdf',
+    ],
   })
-  @IsString()
   @IsOptional()
-  architect?: string;
+  @IsArray()
+  @IsString({ each: true })
+  documents?: string[];
 
-  @ApiProperty({
-    description: 'Additional technical specifications',
-    required: false,
-    example:
-      'Foundation: Reinforced concrete, Walls: Brick and mortar, Roof: Iron sheets',
+  @ApiPropertyOptional({
+    description: 'Special conditions or requirements',
+    example: 'Must comply with environmental impact assessment',
   })
-  @IsString()
   @IsOptional()
-  technicalSpecs?: string;
+  @IsString()
+  @Length(10, 1000)
+  conditions?: string;
 }

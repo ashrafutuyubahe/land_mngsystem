@@ -16,7 +16,6 @@ import {
   ClickHouseService,
   LandRecordAnalytics,
 } from '../clickhouse/clickhouse.service';
-import { EventService } from '../events/event.service';
 
 @Injectable()
 export class LandRegistrationService {
@@ -26,14 +25,13 @@ export class LandRegistrationService {
     @InjectRepository(LandRecord)
     private landRecordRepository: Repository<LandRecord>,
     private readonly clickHouseService: ClickHouseService,
-    private readonly eventService: EventService,
   ) {}
 
   async create(
     createLandRecordDto: CreateLandRecordDto,
     owner: User,
   ): Promise<LandRecord> {
-   
+    // Check if parcel number already exists
     const existingParcel = await this.landRecordRepository.findOne({
       where: { parcelNumber: createLandRecordDto.parcelNumber },
     });
@@ -41,7 +39,7 @@ export class LandRegistrationService {
       throw new ForbiddenException('Parcel number already exists');
     }
 
-    
+    // Check if UPI number already exists
     const existingUpi = await this.landRecordRepository.findOne({
       where: { upiNumber: createLandRecordDto.upiNumber },
     });
@@ -58,20 +56,10 @@ export class LandRegistrationService {
 
     const savedRecord = await this.landRecordRepository.save(landRecord);
 
-    // Syncing to clickHouse for analytics
+    // Sync to ClickHouse for analytics (async, don't block the response)
     this.syncToClickHouse(savedRecord).catch((error) => {
       this.logger.error('Failed to sync land record to ClickHouse:', error);
     });
-
-    // publishig land registration event to RabbitMQ
-    try {
-      await this.eventService.publishLandRegistered(savedRecord, owner.id);
-      this.logger.log(
-        `Published land registration event for parcel: ${savedRecord.parcelNumber}`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to publish land registration event:', error);
-    }
 
     return savedRecord;
   }
@@ -81,15 +69,15 @@ export class LandRegistrationService {
       .createQueryBuilder('land')
       .leftJoinAndSelect('land.owner', 'owner');
 
-    
+    // Citizens can only see their own land records
     if (user.role === UserRole.CITIZEN) {
       query.where('land.owner.id = :userId', { userId: user.id });
     }
-    
+    // Land officers can see all records in their district
     else if (user.role === UserRole.LAND_OFFICER) {
       query.where('land.district = :district', { district: user.district });
     }
-    
+    // Admins can see all records
 
     return query.getMany();
   }
@@ -104,6 +92,7 @@ export class LandRegistrationService {
       throw new NotFoundException('Land record not found');
     }
 
+    // Check access permissions
     if (user.role === UserRole.CITIZEN && landRecord.owner.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
@@ -125,7 +114,7 @@ export class LandRegistrationService {
   ): Promise<LandRecord> {
     const landRecord = await this.findOne(id, user);
 
-    
+    // Only allow updates if pending or by authorized personnel
     if (
       landRecord.status !== LandStatus.PENDING &&
       user.role === UserRole.CITIZEN
@@ -133,25 +122,8 @@ export class LandRegistrationService {
       throw new ForbiddenException('Cannot update approved land record');
     }
 
-    const originalRecord = { ...landRecord };
     Object.assign(landRecord, updateLandRecordDto);
-    const updatedRecord = await this.landRecordRepository.save(landRecord);
-
-    // publishing land updated event to rabbitMQ
-    try {
-      await this.eventService.publishLandUpdated(
-        updatedRecord,
-        user.id,
-        updateLandRecordDto,
-      );
-      this.logger.log(
-        `Published land update event for parcel: ${updatedRecord.parcelNumber}`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to publish land update event:', error);
-    }
-
-    return updatedRecord;
+    return this.landRecordRepository.save(landRecord);
   }
 
   async approve(id: string, user: User): Promise<LandRecord> {
@@ -178,29 +150,11 @@ export class LandRegistrationService {
       );
     }
 
-    const oldStatus = landRecord.status;
     landRecord.status = LandStatus.APPROVED;
     landRecord.approvedBy = user.id;
     landRecord.approvedAt = new Date();
 
-    const approvedRecord = await this.landRecordRepository.save(landRecord);
-
-    // publishing land status changed event to RabbitMQ
-    try {
-      await this.eventService.publishLandStatusChanged(
-        approvedRecord,
-        oldStatus,
-        LandStatus.APPROVED,
-        user.id,
-      );
-      this.logger.log(
-        `Published land approval event for parcel: ${approvedRecord.parcelNumber}`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to publish land approval event:', error);
-    }
-
-    return approvedRecord;
+    return this.landRecordRepository.save(landRecord);
   }
 
   async reject(id: string, reason: string, user: User): Promise<LandRecord> {
@@ -217,37 +171,19 @@ export class LandRegistrationService {
     }
 
     const landRecord = await this.findOne(id, user);
-    const oldStatus = landRecord.status;
 
     landRecord.status = LandStatus.REJECTED;
     landRecord.rejectionReason = reason;
     landRecord.approvedBy = user.id;
     landRecord.approvedAt = new Date();
 
-    const rejectedRecord = await this.landRecordRepository.save(landRecord);
-
-    // publish land status changed event to RabbitMQ
-    try {
-      await this.eventService.publishLandStatusChanged(
-        rejectedRecord,
-        oldStatus,
-        LandStatus.REJECTED,
-        user.id,
-      );
-      this.logger.log(
-        `Published land rejection event for parcel: ${rejectedRecord.parcelNumber}`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to publish land rejection event:', error);
-    }
-
-    return rejectedRecord;
+    return this.landRecordRepository.save(landRecord);
   }
 
   async remove(id: string, user: User): Promise<void> {
     const landRecord = await this.findOne(id, user);
 
-    //  allowing only deletion if pending and by owner or authorized personnel
+    // Only allow deletion if pending and by owner or authorized personnel
     if (
       landRecord.status !== LandStatus.PENDING &&
       user.role === UserRole.CITIZEN
@@ -265,7 +201,7 @@ export class LandRegistrationService {
     });
   }
 
-  // clickHouse analytics integration
+  // ClickHouse Analytics Integration
   private async syncToClickHouse(landRecord: LandRecord): Promise<void> {
     try {
       const analyticsRecord: LandRecordAnalytics = {
@@ -287,7 +223,7 @@ export class LandRegistrationService {
         lng: landRecord.coordinates?.longitude,
         estimated_value: landRecord.marketValue,
         land_type: landRecord.landUseType,
-        tenure_type: 'FREEHOLD', 
+        tenure_type: 'FREEHOLD', // Default value, can be extended later
       };
 
       await this.clickHouseService.syncLandRecord(analyticsRecord);
@@ -300,7 +236,7 @@ export class LandRegistrationService {
     }
   }
 
-  //  performant findall methods using clickhouse
+  // High-performance findAll using ClickHouse for large datasets
   async findAllAnalytics(
     user: User,
     filters: {
@@ -324,11 +260,11 @@ export class LandRegistrationService {
     source: 'clickhouse' | 'postgres';
   }> {
     try {
-      
+      // Apply user-based filtering
       const userFilters = { ...filters };
 
       if (user.role === UserRole.CITIZEN) {
-        
+        // Citizens can only see their own records - we need to get from PostgreSQL
         const records = await this.findAll(user);
         return {
           data: records.map((record) => this.transformToAnalytics(record)),
@@ -341,7 +277,7 @@ export class LandRegistrationService {
         userFilters.district = user.district;
       }
 
-      // Using clickHouse for high-performance analytics
+      // Use ClickHouse for high-performance analytics
       const result =
         await this.clickHouseService.getLandRecordsAnalytics(userFilters);
 
@@ -355,7 +291,7 @@ export class LandRegistrationService {
         error,
       );
 
-      
+      // Fallback to PostgreSQL
       const records = await this.findAll(user);
       return {
         data: records.map((record) => this.transformToAnalytics(record)),
@@ -387,11 +323,11 @@ export class LandRegistrationService {
       lng: record.coordinates?.longitude,
       estimated_value: record.marketValue,
       land_type: record.landUseType,
-      tenure_type: 'FREEHOLD',
+      tenure_type: 'FREEHOLD', // Default value, can be extended later
     };
   }
 
-  // bulk syncing all existing records
+  // Bulk sync all existing records to ClickHouse
   async bulkSyncToClickHouse(): Promise<{ synced: number; errors: number }> {
     try {
       this.logger.log('Starting bulk sync of land records to ClickHouse...');

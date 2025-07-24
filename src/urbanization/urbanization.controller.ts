@@ -6,11 +6,9 @@ import {
   Patch,
   Param,
   Delete,
-  Query,
   UseGuards,
   Request,
-  HttpCode,
-  HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,203 +16,332 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { UrbanizationService } from './urbanization.service';
 import { CreateConstructionPermitDto } from './dto/create-construction-permit.dto';
 import { UpdateConstructionPermitDto } from './dto/update-construction-permit.dto';
-import {
-  ScheduleInspectionDto,
-  ConductInspectionDto,
-  ReviewPermitDto,
-} from './dto/inspection.dto';
+import { CreateInspectionDto, UpdateInspectionDto } from './dto/inspection.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '../auth/entities/user.entity';
-import { PermitStatus } from './entities/construction-permit.entity';
-import { InspectionType, InspectionStatus } from './enums/construction.enum';
+import { UserRole } from '../auth/enums/user-role.enum';
+import { PermitStatus } from './enums/construction.enum';
 
-@ApiTags('Urbanization & Construction')
-@ApiBearerAuth()
+@ApiTags('Urbanization & Construction Permits')
+@Controller('urbanization')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller('construction-permits')
+@ApiBearerAuth()
 export class UrbanizationController {
   constructor(private readonly urbanizationService: UrbanizationService) {}
 
-  @Post()
-  @ApiOperation({ summary: 'Apply for a new construction permit' })
+  // Construction Permit Endpoints
+  @Post('permits')
+  @ApiOperation({
+    summary: 'Create a new construction permit application',
+    description: 'Submit a new construction permit application for review.',
+  })
   @ApiResponse({
     status: 201,
     description: 'Construction permit created successfully',
   })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
-  @ApiResponse({ status: 403, description: 'Access forbidden' })
-  @ApiResponse({ status: 404, description: 'Land record not found' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - Invalid input data',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
   async createPermit(
     @Body() createPermitDto: CreateConstructionPermitDto,
     @Request() req,
   ) {
-    return await this.urbanizationService.createPermit(
-      createPermitDto,
-      req.user,
-    );
+    return this.urbanizationService.createPermit(createPermitDto, req.user);
   }
 
-  @Get()
-  @ApiOperation({ summary: 'Get all construction permits' })
+  @Get('permits')
+  @ApiOperation({
+    summary: 'Get all construction permits',
+    description:
+      'Retrieve construction permits based on user role and permissions.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Construction permits retrieved successfully',
   })
   async findAllPermits(@Request() req) {
-    return await this.urbanizationService.findAllPermits(req.user);
+    return this.urbanizationService.findAllPermits(req.user);
   }
 
-  @Get('statistics')
-  @ApiOperation({ summary: 'Get construction permit statistics' })
+  @Get('permits/:id')
+  @ApiOperation({
+    summary: 'Get a specific construction permit',
+    description: 'Retrieve detailed information about a construction permit.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Construction permit ID',
+    example: 'uuid-permit-id',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Statistics retrieved successfully',
+    description: 'Construction permit retrieved successfully',
   })
-  async getStatistics(@Request() req) {
-    return await this.urbanizationService.getPermitStatistics(req.user);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a specific construction permit by ID' })
-  @ApiResponse({ status: 200, description: 'Construction permit found' })
-  @ApiResponse({ status: 403, description: 'Access forbidden' })
-  @ApiResponse({ status: 404, description: 'Construction permit not found' })
-  @ApiParam({ name: 'id', description: 'Construction permit ID' })
+  @ApiResponse({
+    status: 404,
+    description: 'Construction permit not found',
+  })
   async findOnePermit(@Param('id') id: string, @Request() req) {
-    return await this.urbanizationService.findOnePermit(id, req.user);
+    return this.urbanizationService.findOnePermit(id, req.user);
   }
 
-  @Patch(':id')
-  @ApiOperation({ summary: 'Update a construction permit' })
+  @Patch('permits/:id')
+  @ApiOperation({
+    summary: 'Update a construction permit',
+    description:
+      'Update construction permit details (only in draft or pending documents status).',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Construction permit ID',
+    example: 'uuid-permit-id',
+  })
   @ApiResponse({
     status: 200,
     description: 'Construction permit updated successfully',
   })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
-  @ApiResponse({ status: 403, description: 'Access forbidden' })
-  @ApiResponse({ status: 404, description: 'Construction permit not found' })
-  @ApiParam({ name: 'id', description: 'Construction permit ID' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - Cannot update permit in current status',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
   async updatePermit(
     @Param('id') id: string,
     @Body() updatePermitDto: UpdateConstructionPermitDto,
     @Request() req,
   ) {
-    return await this.urbanizationService.updatePermit(
-      id,
-      updatePermitDto,
-      req.user,
-    );
+    return this.urbanizationService.updatePermit(id, updatePermitDto, req.user);
   }
 
-  @Post(':id/submit')
-  @ApiOperation({ summary: 'Submit a draft permit for review' })
-  @ApiResponse({ status: 200, description: 'Permit submitted successfully' })
+  @Post('permits/:id/submit')
+  @ApiOperation({
+    summary: 'Submit construction permit for review',
+    description: 'Submit a draft construction permit for official review.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Construction permit ID',
+    example: 'uuid-permit-id',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Construction permit submitted successfully',
+  })
   @ApiResponse({
     status: 400,
-    description: 'Invalid permit status for submission',
+    description: 'Bad Request - Only draft permits can be submitted',
   })
-  @ApiResponse({ status: 403, description: 'Access forbidden' })
-  @ApiResponse({ status: 404, description: 'Construction permit not found' })
-  @ApiParam({ name: 'id', description: 'Construction permit ID' })
   async submitPermit(@Param('id') id: string, @Request() req) {
-    return await this.urbanizationService.submitPermit(id, req.user);
+    return this.urbanizationService.submitPermit(id, req.user);
   }
 
-  @Post(':id/review')
-  @ApiOperation({ summary: 'Review a submitted construction permit' })
-  @ApiResponse({ status: 200, description: 'Permit reviewed successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid review data' })
-  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  @ApiResponse({ status: 404, description: 'Construction permit not found' })
-  @ApiParam({ name: 'id', description: 'Construction permit ID' })
-  @Roles(UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.SYSTEM_ADMIN)
+  @Post('permits/:id/review')
+  @Roles(UserRole.URBAN_PLANNER, UserRole.DISTRICT_ADMIN)
+  @ApiOperation({
+    summary: 'Review and approve/reject construction permit',
+    description:
+      'Review a submitted construction permit and change its status.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Construction permit ID',
+    example: 'uuid-permit-id',
+  })
+  @ApiQuery({
+    name: 'status',
+    description: 'New permit status',
+    enum: PermitStatus,
+    example: PermitStatus.APPROVED,
+  })
+  @ApiQuery({
+    name: 'comments',
+    description: 'Review comments',
+    example: 'Permit approved with standard conditions',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Construction permit reviewed successfully',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
   async reviewPermit(
     @Param('id') id: string,
-    @Body() reviewData: ReviewPermitDto,
+    @Query('status') status: PermitStatus,
+    @Query('comments') comments: string,
     @Request() req,
   ) {
-    return await this.urbanizationService.reviewPermit(
+    return this.urbanizationService.reviewPermit(
       id,
-      reviewData.decision as PermitStatus,
-      reviewData.comments,
+      status,
+      comments,
       req.user,
     );
   }
 
-  @Post(':id/inspections')
-  @ApiOperation({ summary: 'Schedule an inspection for a construction permit' })
+  @Delete('permits/:id')
+  @ApiOperation({
+    summary: 'Delete a construction permit',
+    description: 'Delete a construction permit (only draft permits).',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Construction permit ID',
+    example: 'uuid-permit-id',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Construction permit deleted successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - Only draft permits can be deleted',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
+  async removePermit(@Param('id') id: string, @Request() req) {
+    await this.urbanizationService.removePermit(id, req.user);
+    return { message: 'Construction permit deleted successfully' };
+  }
+
+  // Inspection Endpoints
+  @Post('inspections')
+  @Roles(UserRole.URBAN_PLANNER, UserRole.DISTRICT_ADMIN)
+  @ApiOperation({
+    summary: 'Schedule a new inspection',
+    description: 'Schedule an inspection for an approved construction permit.',
+  })
   @ApiResponse({
     status: 201,
     description: 'Inspection scheduled successfully',
   })
-  @ApiResponse({ status: 400, description: 'Invalid inspection data' })
-  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  @ApiResponse({ status: 404, description: 'Construction permit not found' })
-  @ApiParam({ name: 'id', description: 'Construction permit ID' })
-  @Roles(UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.SYSTEM_ADMIN)
-  async scheduleInspection(
-    @Param('id') id: string,
-    @Body() inspectionData: ScheduleInspectionDto,
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request - Can only create inspections for approved permits',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
+  async createInspection(
+    @Body() createInspectionDto: CreateInspectionDto,
     @Request() req,
   ) {
-    return await this.urbanizationService.scheduleInspection(
-      id,
-      inspectionData.inspectionType,
+    return this.urbanizationService.createInspection(
+      createInspectionDto,
       req.user,
     );
   }
 
-  @Get(':id/inspections')
-  @ApiOperation({ summary: 'Get all inspections for a construction permit' })
+  @Get('inspections')
+  @ApiOperation({
+    summary: 'Get all inspections',
+    description: 'Retrieve inspections based on user role and permissions.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Inspections retrieved successfully',
   })
-  @ApiResponse({ status: 403, description: 'Access forbidden' })
-  @ApiResponse({ status: 404, description: 'Construction permit not found' })
-  @ApiParam({ name: 'id', description: 'Construction permit ID' })
-  async findPermitInspections(@Param('id') id: string, @Request() req) {
-    return await this.urbanizationService.findPermitInspections(id, req.user);
+  async findAllInspections(@Request() req) {
+    return this.urbanizationService.findAllInspections(req.user);
   }
 
-  @Patch('inspections/:inspectionId')
-  @ApiOperation({ summary: 'Conduct/update an inspection' })
-  @ApiResponse({ status: 200, description: 'Inspection updated successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid inspection data' })
-  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  @ApiResponse({ status: 404, description: 'Inspection not found' })
-  @ApiParam({ name: 'inspectionId', description: 'Inspection ID' })
-  @Roles(UserRole.LAND_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.SYSTEM_ADMIN)
-  async conductInspection(
-    @Param('inspectionId') inspectionId: string,
-    @Body() inspectionData: ConductInspectionDto,
+  @Patch('inspections/:id')
+  @ApiOperation({
+    summary: 'Update inspection details',
+    description: 'Update inspection findings, status, and other details.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Inspection ID',
+    example: 'uuid-inspection-id',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Inspection updated successfully',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Inspection not found',
+  })
+  async updateInspection(
+    @Param('id') id: string,
+    @Body() updateInspectionDto: UpdateInspectionDto,
     @Request() req,
   ) {
-    return await this.urbanizationService.conductInspection(
-      inspectionId,
-      inspectionData.result,
-      inspectionData.notes,
+    return this.urbanizationService.updateInspection(
+      id,
+      updateInspectionDto,
       req.user,
     );
   }
 
-  @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a construction permit' })
-  @ApiResponse({
-    status: 204,
-    description: 'Construction permit deleted successfully',
+  // Statistics and Reports
+  @Get('permits/statistics/overview')
+  @Roles(
+    UserRole.URBAN_PLANNER,
+    UserRole.DISTRICT_ADMIN,
+    UserRole.SYSTEM_ADMIN,
+    UserRole.SUPER_ADMIN,
+  )
+  @ApiOperation({
+    summary: 'Get construction permit statistics',
+    description: 'Retrieve overview statistics for construction permits.',
   })
-  @ApiResponse({ status: 403, description: 'Access forbidden' })
-  @ApiResponse({ status: 404, description: 'Construction permit not found' })
-  @ApiParam({ name: 'id', description: 'Construction permit ID' })
-  async removePermit(@Param('id') id: string, @Request() req) {
-    await this.urbanizationService.removePermit(id, req.user);
+  @ApiResponse({
+    status: 200,
+    description: 'Statistics retrieved successfully',
+  })
+  async getPermitStatistics(@Request() req) {
+    // This would be implemented to return permit statistics
+    return {
+      message: 'Statistics endpoint - to be implemented',
+      userRole: req.user.role,
+    };
+  }
+
+  @Get('inspections/statistics/overview')
+  @Roles(
+    UserRole.URBAN_PLANNER,
+    UserRole.DISTRICT_ADMIN,
+    UserRole.SYSTEM_ADMIN,
+    UserRole.SUPER_ADMIN,
+  )
+  @ApiOperation({
+    summary: 'Get inspection statistics',
+    description: 'Retrieve overview statistics for inspections.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Statistics retrieved successfully',
+  })
+  async getInspectionStatistics(@Request() req) {
+    // This would be implemented to return inspection statistics
+    return {
+      message: 'Statistics endpoint - to be implemented',
+      userRole: req.user.role,
+    };
   }
 }

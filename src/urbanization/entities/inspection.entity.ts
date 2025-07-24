@@ -16,14 +16,14 @@ export class Inspection {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ unique: true })
   inspectionNumber: string;
 
   @Column({
     type: 'enum',
     enum: InspectionType,
   })
-  type: InspectionType;
+  inspectionType: InspectionType;
 
   @Column({
     type: 'enum',
@@ -39,25 +39,28 @@ export class Inspection {
   completedDate: Date;
 
   @Column('text', { nullable: true })
-  notes: string;
-
-  @Column('text', { nullable: true })
   findings: string;
 
   @Column('text', { nullable: true })
   recommendations: string;
 
   @Column('text', { nullable: true })
-  deficiencies: string; 
-
-  @Column('text', { nullable: true })
-  photos: string;
+  deficiencies: string;
 
   @Column({ nullable: true })
   nextInspectionDate: Date;
 
+  @Column('text', { nullable: true })
+  photos: string; // JSON array of photo URLs
+
+  @Column('text', { nullable: true })
+  documents: string; // JSON array of document URLs
+
+  @Column('text', { nullable: true })
+  notes: string;
+
   @Column({ default: false })
-  isReinspection: boolean;
+  isCompliant: boolean;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -66,7 +69,7 @@ export class Inspection {
   updatedAt: Date;
 
   // Relationships
-  @ManyToOne(() => ConstructionPermit, { eager: true })
+  @ManyToOne(() => ConstructionPermit, (permit) => permit.inspections)
   @JoinColumn({ name: 'permitId' })
   permit: ConstructionPermit;
 
@@ -78,5 +81,3 @@ export class Inspection {
   @JoinColumn({ name: 'scheduledById' })
   scheduledBy: User;
 }
-
-export { InspectionType, InspectionStatus };

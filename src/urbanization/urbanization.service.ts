@@ -1,103 +1,123 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
-  BadRequestException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  ConstructionPermit,
-  PermitStatus,
-  ConstructionType,
-} from './entities/construction-permit.entity';
-import {
-  Inspection,
-  InspectionType,
-  InspectionStatus,
-} from './entities/inspection.entity';
-import { LandRecord } from '../land-registration/entities/land-record.entity';
-import { User, UserRole } from '../auth/entities/user.entity';
+import { ConstructionPermit } from './entities/construction-permit.entity';
+import { Inspection } from './entities/inspection.entity';
 import { CreateConstructionPermitDto } from './dto/create-construction-permit.dto';
 import { UpdateConstructionPermitDto } from './dto/update-construction-permit.dto';
+import { CreateInspectionDto, UpdateInspectionDto } from './dto/inspection.dto';
+import { PermitStatus, InspectionStatus } from './enums/construction.enum';
+import { User } from '../auth/entities/user.entity';
+import { UserRole } from '../auth/enums/user-role.enum';
+import { LandRecord } from '../land-registration/entities/land-record.entity';
 
 @Injectable()
 export class UrbanizationService {
+  private readonly logger = new Logger(UrbanizationService.name);
+
   constructor(
     @InjectRepository(ConstructionPermit)
-    private permitRepository: Repository<ConstructionPermit>,
+    private constructionPermitRepository: Repository<ConstructionPermit>,
     @InjectRepository(Inspection)
     private inspectionRepository: Repository<Inspection>,
     @InjectRepository(LandRecord)
     private landRecordRepository: Repository<LandRecord>,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
   ) {}
 
+  // Construction Permit Methods
   async createPermit(
     createPermitDto: CreateConstructionPermitDto,
     applicant: User,
   ): Promise<ConstructionPermit> {
-    // Verify land record exists and user has permission
+    // Verify land record exists and belongs to applicant or they have permission
     const landRecord = await this.landRecordRepository.findOne({
       where: { id: createPermitDto.landRecordId },
+      relations: ['owner'],
     });
 
     if (!landRecord) {
       throw new NotFoundException('Land record not found');
     }
 
-    // Check if user owns the land or has permission
     if (
-      applicant.role === UserRole.CITIZEN &&
-      landRecord.ownerId !== applicant.id
+      landRecord.owner.id !== applicant.id &&
+      ![
+        UserRole.LAND_OFFICER,
+        UserRole.URBAN_PLANNER,
+        UserRole.DISTRICT_ADMIN,
+      ].includes(applicant.role)
     ) {
       throw new ForbiddenException(
         'You can only apply for permits on your own land',
       );
     }
 
+    // Generate permit number
+    const permitNumber = await this.generatePermitNumber();
+
     // Validate dates
     const startDate = new Date(createPermitDto.plannedStartDate);
-    const endDate = new Date(createPermitDto.plannedCompletionDate);
-    if (startDate >= endDate) {
-      throw new BadRequestException(
-        'Start date must be before completion date',
-      );
+    const completionDate = new Date(createPermitDto.plannedCompletionDate);
+
+    if (completionDate <= startDate) {
+      throw new BadRequestException('Completion date must be after start date');
     }
 
-    const permit = this.permitRepository.create({
+    const permit = this.constructionPermitRepository.create({
       ...createPermitDto,
-      landRecord,
+      permitNumber,
       applicant,
+      landRecord,
+      plannedStartDate: startDate,
+      plannedCompletionDate: completionDate,
       status: PermitStatus.DRAFT,
-      permitNumber: await this.generatePermitNumber(),
+      documents: createPermitDto.documents
+        ? JSON.stringify(createPermitDto.documents)
+        : null,
     });
 
-    return await this.permitRepository.save(permit);
+    const savedPermit = await this.constructionPermitRepository.save(permit);
+    this.logger.log(`Construction permit created: ${permitNumber}`);
+
+    return savedPermit;
   }
 
   async findAllPermits(user: User): Promise<ConstructionPermit[]> {
-    const queryBuilder = this.permitRepository
+    const query = this.constructionPermitRepository
       .createQueryBuilder('permit')
-      .leftJoinAndSelect('permit.landRecord', 'landRecord')
       .leftJoinAndSelect('permit.applicant', 'applicant')
-      .leftJoinAndSelect('permit.reviewedBy', 'reviewedBy');
+      .leftJoinAndSelect('permit.landRecord', 'landRecord')
+      .leftJoinAndSelect('permit.inspections', 'inspections');
 
-    
+    // Filter based on user role
     if (user.role === UserRole.CITIZEN) {
-      queryBuilder.andWhere('permit.applicant.id = :userId', {
-        userId: user.id,
+      query.where('permit.applicant.id = :userId', { userId: user.id });
+    } else if (user.role === UserRole.URBAN_PLANNER) {
+      query.where('landRecord.district = :district', {
+        district: user.district,
       });
     }
+    // Admins and other roles can see all permits
 
-    return await queryBuilder.orderBy('permit.createdAt', 'DESC').getMany();
+    return query.getMany();
   }
 
   async findOnePermit(id: string, user: User): Promise<ConstructionPermit> {
-    const permit = await this.permitRepository.findOne({
+    const permit = await this.constructionPermitRepository.findOne({
       where: { id },
-      relations: ['landRecord', 'applicant', 'reviewedBy', 'inspections'],
+      relations: [
+        'applicant',
+        'landRecord',
+        'inspections',
+        'reviewedBy',
+        'approvedBy',
+      ],
     });
 
     if (!permit) {
@@ -106,7 +126,7 @@ export class UrbanizationService {
 
     // Check permissions
     if (user.role === UserRole.CITIZEN && permit.applicant.id !== user.id) {
-      throw new ForbiddenException('You can only view your own permits');
+      throw new ForbiddenException('Access denied to this permit');
     }
 
     return permit;
@@ -119,113 +139,127 @@ export class UrbanizationService {
   ): Promise<ConstructionPermit> {
     const permit = await this.findOnePermit(id, user);
 
-    // Citizens can only update certain fields for draft permits
-    if (user.role === UserRole.CITIZEN) {
-      if (permit.applicant.id !== user.id) {
-        throw new ForbiddenException('You can only update your own permits');
-      }
-
-      if (permit.status !== PermitStatus.DRAFT) {
-        throw new BadRequestException(
-          'Can only update permits in draft status',
-        );
-      }
-
-      // Citizens cannot update status or review fields
-      const { status, reviewComments, ...allowedUpdates } = updatePermitDto;
-      Object.assign(permit, allowedUpdates);
-    } else {
-      // Officials can update all fields
-      Object.assign(permit, updatePermitDto);
-
-      if (updatePermitDto.status && updatePermitDto.status !== permit.status) {
-        permit.reviewedAt = new Date();
-        permit.reviewedBy = user;
-      }
+    // Only allow updates in certain statuses
+    if (
+      ![PermitStatus.DRAFT, PermitStatus.PENDING_DOCUMENTS].includes(
+        permit.status,
+      )
+    ) {
+      throw new BadRequestException('Cannot update permit in current status');
     }
 
-    return await this.permitRepository.save(permit);
+    // Only applicant or authorized personnel can update
+    if (
+      permit.applicant.id !== user.id &&
+      ![UserRole.URBAN_PLANNER, UserRole.DISTRICT_ADMIN].includes(user.role)
+    ) {
+      throw new ForbiddenException('Insufficient permissions to update permit');
+    }
+
+    Object.assign(permit, updatePermitDto);
+
+    if (updatePermitDto.documents) {
+      permit.documents = JSON.stringify(updatePermitDto.documents);
+    }
+
+    return this.constructionPermitRepository.save(permit);
   }
 
   async submitPermit(id: string, user: User): Promise<ConstructionPermit> {
     const permit = await this.findOnePermit(id, user);
 
-    if (permit.applicant.id !== user.id) {
-      throw new ForbiddenException('You can only submit your own permits');
-    }
-
     if (permit.status !== PermitStatus.DRAFT) {
       throw new BadRequestException('Only draft permits can be submitted');
+    }
+
+    if (permit.applicant.id !== user.id) {
+      throw new ForbiddenException('Only the applicant can submit the permit');
     }
 
     permit.status = PermitStatus.SUBMITTED;
     permit.submittedAt = new Date();
 
-    return await this.permitRepository.save(permit);
+    return this.constructionPermitRepository.save(permit);
   }
 
   async reviewPermit(
     id: string,
-    decision: PermitStatus,
+    status: PermitStatus,
     comments: string,
-    reviewer: User,
+    user: User,
   ): Promise<ConstructionPermit> {
-    // Only authorized officials can review permits
     if (
-      ![
-        UserRole.LAND_OFFICER,
-        UserRole.DISTRICT_ADMIN,
-        UserRole.SYSTEM_ADMIN,
-      ].includes(reviewer.role)
+      ![UserRole.URBAN_PLANNER, UserRole.DISTRICT_ADMIN].includes(user.role)
     ) {
       throw new ForbiddenException(
         'Insufficient permissions to review permits',
       );
     }
 
-    const permit = await this.permitRepository.findOne({
-      where: { id },
-      relations: ['applicant'],
-    });
-
-    if (!permit) {
-      throw new NotFoundException('Construction permit not found');
-    }
+    const permit = await this.findOnePermit(id, user);
 
     if (
       ![PermitStatus.SUBMITTED, PermitStatus.UNDER_REVIEW].includes(
         permit.status,
       )
     ) {
-      throw new BadRequestException('Only submitted permits can be reviewed');
-    }
-
-    permit.status = decision;
-    permit.reviewComments = comments;
-    permit.reviewedAt = new Date();
-    permit.reviewedBy = reviewer;
-
-    // If approved, scheduling initial inspection
-    const savedPermit = await this.permitRepository.save(permit);
-
-    if (decision === PermitStatus.APPROVED) {
-      await this.scheduleInspection(
-        permit.id,
-        InspectionType.SITE_ASSESSMENT,
-        reviewer,
+      throw new BadRequestException(
+        'Permit cannot be reviewed in current status',
       );
     }
 
-    return savedPermit;
+    permit.status = status;
+    permit.reviewComments = comments;
+    permit.reviewedBy = user;
+    permit.reviewedAt = new Date();
+
+    if (status === PermitStatus.APPROVED) {
+      permit.approvedBy = user;
+      permit.approvedAt = new Date();
+      // Set expiry date (e.g., 2 years from approval)
+      permit.expiryDate = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000);
+    } else if (status === PermitStatus.REJECTED) {
+      permit.rejectionReason = comments;
+    }
+
+    return this.constructionPermitRepository.save(permit);
   }
 
-  async scheduleInspection(
-    permitId: string,
-    inspectionType: InspectionType,
-    scheduler: User,
+  async removePermit(id: string, user: User): Promise<void> {
+    const permit = await this.findOnePermit(id, user);
+
+    // Only allow deletion in draft status
+    if (permit.status !== PermitStatus.DRAFT) {
+      throw new BadRequestException('Only draft permits can be deleted');
+    }
+
+    // Only applicant or admin can delete
+    if (
+      permit.applicant.id !== user.id &&
+      ![UserRole.DISTRICT_ADMIN, UserRole.SYSTEM_ADMIN].includes(user.role)
+    ) {
+      throw new ForbiddenException('Insufficient permissions to delete permit');
+    }
+
+    await this.constructionPermitRepository.remove(permit);
+    this.logger.log(`Construction permit deleted: ${permit.permitNumber}`);
+  }
+
+  // Inspection Methods
+  async createInspection(
+    createInspectionDto: CreateInspectionDto,
+    user: User,
   ): Promise<Inspection> {
-    const permit = await this.permitRepository.findOne({
-      where: { id: permitId },
+    if (
+      ![UserRole.URBAN_PLANNER, UserRole.DISTRICT_ADMIN].includes(user.role)
+    ) {
+      throw new ForbiddenException(
+        'Insufficient permissions to create inspections',
+      );
+    }
+
+    const permit = await this.constructionPermitRepository.findOne({
+      where: { id: createInspectionDto.permitId },
     });
 
     if (!permit) {
@@ -234,187 +268,108 @@ export class UrbanizationService {
 
     if (permit.status !== PermitStatus.APPROVED) {
       throw new BadRequestException(
-        'Can only schedule inspections for approved permits',
+        'Can only create inspections for approved permits',
       );
     }
 
-    // Check if this type of inspection already exists for this permit
-    const existingInspection = await this.inspectionRepository.findOne({
-      where: { permit: { id: permitId }, type: inspectionType },
-    });
-
-    if (existingInspection) {
-      throw new BadRequestException(
-        `${inspectionType} inspection already scheduled for this permit`,
-      );
-    }
+    // Generate inspection number
+    const inspectionNumber = await this.generateInspectionNumber();
 
     const inspection = this.inspectionRepository.create({
-      permit,
-      type: inspectionType,
-      status: InspectionStatus.SCHEDULED,
-      scheduledBy: scheduler,
-      scheduledDate: new Date(),
+      ...createInspectionDto,
+      inspectionNumber,
+      scheduledDate: new Date(createInspectionDto.scheduledDate),
+      scheduledBy: user,
     });
 
-    return await this.inspectionRepository.save(inspection);
+    return this.inspectionRepository.save(inspection);
   }
 
-  async findPermitInspections(
-    permitId: string,
-    user: User,
-  ): Promise<Inspection[]> {
-    // Verify user has access to this permit
-    await this.findOnePermit(permitId, user);
+  async findAllInspections(user: User): Promise<Inspection[]> {
+    const query = this.inspectionRepository
+      .createQueryBuilder('inspection')
+      .leftJoinAndSelect('inspection.permit', 'permit')
+      .leftJoinAndSelect('inspection.inspector', 'inspector')
+      .leftJoinAndSelect('permit.applicant', 'applicant');
 
-    return await this.inspectionRepository.find({
-      where: { permit: { id: permitId } },
-      relations: ['scheduledBy', 'inspector'],
-      order: { scheduledDate: 'DESC' },
-    });
-  }
-
-  async conductInspection(
-    inspectionId: string,
-    result: InspectionStatus,
-    notes: string,
-    inspector: User,
-  ): Promise<Inspection> {
-    // Only authorized officials can conduct inspections
-    if (
-      ![
-        UserRole.LAND_OFFICER,
-        UserRole.DISTRICT_ADMIN,
-        UserRole.SYSTEM_ADMIN,
-      ].includes(inspector.role)
-    ) {
-      throw new ForbiddenException(
-        'Insufficient permissions to conduct inspections',
-      );
+    // Filter based on user role
+    if (user.role === UserRole.CITIZEN) {
+      query.where('applicant.id = :userId', { userId: user.id });
+    } else if (user.role === UserRole.URBAN_PLANNER) {
+      query
+        .leftJoinAndSelect('permit.landRecord', 'landRecord')
+        .where('landRecord.district = :district', { district: user.district });
     }
 
+    return query.getMany();
+  }
+
+  async updateInspection(
+    id: string,
+    updateInspectionDto: UpdateInspectionDto,
+    user: User,
+  ): Promise<Inspection> {
     const inspection = await this.inspectionRepository.findOne({
-      where: { id: inspectionId },
-      relations: ['permit'],
+      where: { id },
+      relations: ['inspector', 'permit'],
     });
 
     if (!inspection) {
       throw new NotFoundException('Inspection not found');
     }
 
-    if (inspection.status !== InspectionStatus.SCHEDULED) {
-      throw new BadRequestException(
-        'Only scheduled inspections can be conducted',
+    // Only inspector or authorized personnel can update
+    if (
+      inspection.inspector.id !== user.id &&
+      ![UserRole.URBAN_PLANNER, UserRole.DISTRICT_ADMIN].includes(user.role)
+    ) {
+      throw new ForbiddenException(
+        'Insufficient permissions to update inspection',
       );
     }
 
-    inspection.status = result;
-    inspection.notes = notes;
-    inspection.completedDate = new Date();
-    inspection.inspector = inspector;
+    Object.assign(inspection, updateInspectionDto);
 
-    return await this.inspectionRepository.save(inspection);
-  }
-
-  async getPermitStatistics(user: User): Promise<any> {
-    const baseQuery = this.permitRepository.createQueryBuilder('permit');
-
-    // Apply user-based filtering
-    if (user.role === UserRole.CITIZEN) {
-      baseQuery.andWhere('permit.applicant.id = :userId', { userId: user.id });
+    if (updateInspectionDto.photos) {
+      inspection.photos = JSON.stringify(updateInspectionDto.photos);
     }
 
-    const [
-      totalPermits,
-      draftPermits,
-      submittedPermits,
-      underReviewPermits,
-      approvedPermits,
-      rejectedPermits,
-      averageProcessingTime,
-    ] = await Promise.all([
-      baseQuery.getCount(),
-      baseQuery
-        .clone()
-        .where('permit.status = :status', { status: PermitStatus.DRAFT })
-        .getCount(),
-      baseQuery
-        .clone()
-        .where('permit.status = :status', { status: PermitStatus.SUBMITTED })
-        .getCount(),
-      baseQuery
-        .clone()
-        .where('permit.status = :status', { status: PermitStatus.UNDER_REVIEW })
-        .getCount(),
-      baseQuery
-        .clone()
-        .where('permit.status = :status', { status: PermitStatus.APPROVED })
-        .getCount(),
-      baseQuery
-        .clone()
-        .where('permit.status = :status', { status: PermitStatus.REJECTED })
-        .getCount(),
-      this.calculateAverageProcessingTime(user),
-    ]);
-
-    return {
-      totalPermits,
-      statusBreakdown: {
-        draft: draftPermits,
-        submitted: submittedPermits,
-        underReview: underReviewPermits,
-        approved: approvedPermits,
-        rejected: rejectedPermits,
-      },
-      averageProcessingTimeInDays: averageProcessingTime,
-      approvalRate:
-        totalPermits > 0
-          ? ((approvedPermits / totalPermits) * 100).toFixed(2)
-          : 0,
-    };
-  }
-
-  private async calculateAverageProcessingTime(user: User): Promise<number> {
-    const query = this.permitRepository
-      .createQueryBuilder('permit')
-      .select(
-        'AVG(EXTRACT(EPOCH FROM (permit.reviewedAt - permit.submittedAt))/86400)',
-        'avgDays',
-      )
-      .where('permit.status IN (:...statuses)', {
-        statuses: [PermitStatus.APPROVED, PermitStatus.REJECTED],
-      })
-      .andWhere('permit.reviewedAt IS NOT NULL')
-      .andWhere('permit.submittedAt IS NOT NULL');
-
-    if (user.role === UserRole.CITIZEN) {
-      query.andWhere('permit.applicant.id = :userId', { userId: user.id });
+    if (updateInspectionDto.documents) {
+      inspection.documents = JSON.stringify(updateInspectionDto.documents);
     }
 
-    const result = await query.getRawOne();
-    return result?.avgDays ? parseFloat(result.avgDays) : 0;
-  }
-
-  async removePermit(id: string, user: User): Promise<void> {
-    const permit = await this.findOnePermit(id, user);
-
-    // Only system admin can delete permits, or citizens can delete their own draft permits
-    if (user.role !== UserRole.SYSTEM_ADMIN) {
-      if (
-        user.role !== UserRole.CITIZEN ||
-        permit.applicant.id !== user.id ||
-        permit.status !== PermitStatus.DRAFT
-      ) {
-        throw new ForbiddenException('Cannot delete this permit');
-      }
+    if (updateInspectionDto.completedDate) {
+      inspection.completedDate = new Date(updateInspectionDto.completedDate);
     }
 
-    await this.permitRepository.remove(permit);
+    if (updateInspectionDto.nextInspectionDate) {
+      inspection.nextInspectionDate = new Date(
+        updateInspectionDto.nextInspectionDate,
+      );
+    }
+
+    return this.inspectionRepository.save(inspection);
   }
 
+  // Utility Methods
   private async generatePermitNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = (await this.permitRepository.count()) + 1;
-    return `CP-${year}-${count.toString().padStart(4, '0')}`;
+    const count = await this.constructionPermitRepository.count({
+      where: {
+        createdAt: new Date(year, 0, 1),
+      },
+    });
+    return `CP-${year}-${(count + 1).toString().padStart(6, '0')}`;
+  }
+
+  private async generateInspectionNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const month = new Date().getMonth() + 1;
+    const count = await this.inspectionRepository.count({
+      where: {
+        createdAt: new Date(year, month - 1, 1),
+      },
+    });
+    return `INS-${year}${month.toString().padStart(2, '0')}-${(count + 1).toString().padStart(4, '0')}`;
   }
 }

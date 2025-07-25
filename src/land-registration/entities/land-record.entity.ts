@@ -61,23 +61,12 @@ export class LandRecord {
   @Column('decimal', { precision: 15, scale: 2, nullable: true })
   governmentValue: number;
 
-  // PostGIS geometry columns for spatial data
-  @Column('geometry', {
-    nullable: true,
-    spatialFeatureType: 'Polygon',
-    srid: 4326,
-  })
-  geometry: string; // PostGIS geometry for polygon
-
-  @Column('geometry', {
-    nullable: true,
-    spatialFeatureType: 'Point',
-    srid: 4326,
-  })
-  centerPoint: string; // PostGIS geometry for center point
-
-  @Column('decimal', { precision: 15, scale: 6, nullable: true })
-  calculatedArea: number; // Area calculated by PostGIS
+  @Column('jsonb', { nullable: true })
+  coordinates: {
+    latitude: number;
+    longitude: number;
+    boundaries: Array<{ lat: number; lng: number }>;
+  };
 
   @Column('text', { nullable: true })
   documents: string; // JSON array of document URLs

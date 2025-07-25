@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as wkx from 'wkx';
+import { Polygon, Point } from 'geojson';
 import { LandRecord } from './entities/land-record.entity';
 import { CreateLandRecordDto } from './dto/create-land-record.dto';
 import { UpdateLandRecordDto } from './dto/update-land-record.dto';
@@ -27,6 +29,7 @@ export class LandRegistrationService {
     createLandRecordDto: CreateLandRecordDto,
     owner: User,
   ): Promise<LandRecord> {
+    // Check if parcel number already exists
     const existingParcel = await this.landRecordRepository.findOne({
       where: { parcelNumber: createLandRecordDto.parcelNumber },
     });
@@ -34,6 +37,7 @@ export class LandRegistrationService {
       throw new ForbiddenException('Parcel number already exists');
     }
 
+    // Check if UPI number already exists
     const existingUpi = await this.landRecordRepository.findOne({
       where: { upiNumber: createLandRecordDto.upiNumber },
     });
@@ -41,51 +45,14 @@ export class LandRegistrationService {
       throw new ForbiddenException('UPI number already exists');
     }
 
-    // Process spatial data using PostGIS directly
-    const { geometry, ...landRecordData } = createLandRecordDto;
-
     const landRecord = this.landRecordRepository.create({
-      ...landRecordData,
+      ...createLandRecordDto,
       owner,
       status: LandStatus.PENDING,
       registeredBy: owner.id,
     });
 
     const savedRecord = await this.landRecordRepository.save(landRecord);
-
-    // If geometry is provided, update the record with PostGIS spatial data
-    if (geometry) {
-      try {
-        const geoJsonString = JSON.stringify(geometry);
-
-        await this.landRecordRepository
-          .createQueryBuilder()
-          .update(LandRecord)
-          .set({
-            geometry: () => `ST_GeomFromGeoJSON('${geoJsonString}')`,
-            centerPoint: () =>
-              `ST_Centroid(ST_GeomFromGeoJSON('${geoJsonString}'))`,
-            calculatedArea: () =>
-              `ST_Area(ST_GeomFromGeoJSON('${geoJsonString}'))`,
-          })
-          .where('id = :id', { id: savedRecord.id })
-          .execute();
-
-        const updatedRecord = await this.landRecordRepository.findOne({
-          where: { id: savedRecord.id },
-          relations: ['owner'],
-        });
-
-        this.logger.log(
-          `Processed spatial data for parcel ${createLandRecordDto.parcelNumber}`,
-        );
-
-        return updatedRecord || savedRecord;
-      } catch (error) {
-        this.logger.error('Failed to process spatial data:', error);
-        throw new BadRequestException('Invalid geometry data provided');
-      }
-    }
 
     return savedRecord;
   }
@@ -231,91 +198,6 @@ export class LandRegistrationService {
     return this.landRecordRepository.find({
       where: { district },
       relations: ['owner'],
-    });
-  }
-
-  // Helper method to get geometry as GeoJSON using PostGIS
-  async findOneWithGeometry(
-    id: string,
-    user: User,
-  ): Promise<LandRecord & { geoJsonGeometry?: any; geoJsonCenterPoint?: any }> {
-    const landRecord = await this.findOne(id, user);
-
-    // Get geometry data as GeoJSON using PostGIS functions
-    const geometryData = await this.landRecordRepository
-      .createQueryBuilder('land')
-      .select([
-        'ST_AsGeoJSON(land.geometry) as geometry_geojson',
-        'ST_AsGeoJSON(land.centerPoint) as center_point_geojson',
-      ])
-      .where('land.id = :id', { id })
-      .getRawOne();
-
-    const result: any = { ...landRecord };
-
-    if (geometryData?.geometry_geojson) {
-      try {
-        result.geoJsonGeometry = JSON.parse(geometryData.geometry_geojson);
-      } catch (error) {
-        this.logger.error('Failed to parse geometry GeoJSON:', error);
-      }
-    }
-
-    if (geometryData?.center_point_geojson) {
-      try {
-        result.geoJsonCenterPoint = JSON.parse(
-          geometryData.center_point_geojson,
-        );
-      } catch (error) {
-        this.logger.error('Failed to parse center point GeoJSON:', error);
-      }
-    }
-
-    return result;
-  }
-
-  // Method to get all records with geometry as GeoJSON
-  async findAllWithGeometry(user: User): Promise<any[]> {
-    let query = this.landRecordRepository
-      .createQueryBuilder('land')
-      .leftJoinAndSelect('land.owner', 'owner')
-      .addSelect([
-        'ST_AsGeoJSON(land.geometry) as geometry_geojson',
-        'ST_AsGeoJSON(land.centerPoint) as center_point_geojson',
-      ]);
-
-    // Apply user-based filtering
-    if (user.role === UserRole.CITIZEN) {
-      query = query.where('land.owner.id = :userId', { userId: user.id });
-    } else if (user.role === UserRole.LAND_OFFICER) {
-      query = query.where('land.district = :district', {
-        district: user.district,
-      });
-    }
-
-    const results = await query.getRawAndEntities();
-
-    return results.entities.map((entity, index) => {
-      const raw = results.raw[index];
-      const result: any = { ...entity };
-
-      if (raw?.geometry_geojson) {
-        try {
-          result.geoJsonGeometry = JSON.parse(raw.geometry_geojson);
-        } catch (error) {
-          this.logger.error('Failed to parse geometry GeoJSON:', error);
-        }
-      }
-
-      if (raw?.center_point_geojson) {
-        try {
-          result.geoJsonCenterPoint = JSON.parse(raw.center_point_geojson);
-        } catch (error) {
-          this.logger.error('Failed to parse center point GeoJSON:', error);
-        }
-      }
-
-      return result;
     });
   }
 }

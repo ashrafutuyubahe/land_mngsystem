@@ -9,7 +9,6 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { LandUseType } from '../../common/enums/status.enum';
-import { Polygon, Point } from 'geojson';
 
 export class CreateLandRecordDto {
   @ApiProperty({ example: 'KG-001-2024-001' })
@@ -78,23 +77,24 @@ export class CreateLandRecordDto {
 
   @ApiProperty({
     example: {
-      type: 'Polygon',
-      coordinates: [
-        [
-          [30.056, -1.944],
-          [30.057, -1.944],
-          [30.057, -1.945],
-          [30.056, -1.945],
-          [30.056, -1.944], // Close the polygon
-        ],
+      latitude: -1.944,
+      longitude: 30.056,
+      boundaries: [
+        { lat: -1.944, lng: 30.056 },
+        { lat: -1.945, lng: 30.057 },
+        { lat: -1.946, lng: 30.057 },
+        { lat: -1.946, lng: 30.056 },
       ],
     },
-    description: 'GeoJSON Polygon representing land boundaries',
     required: false,
   })
   @IsOptional()
   @IsObject()
-  geometry?: Polygon | Point;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+    boundaries: Array<{ lat: number; lng: number }>;
+  };
 
   @ApiProperty({ example: '["doc1.pdf", "doc2.pdf"]', required: false })
   @IsOptional()

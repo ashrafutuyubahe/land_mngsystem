@@ -388,19 +388,44 @@ export class LandRegistrationService {
 
     // Get geometry data using raw SQL to ensure proper WKB handling
     const geometryResult = await this.landRecordRepository.query(
-      `SELECT ST_AsBinary(geometry) as geometry_wkb FROM land_records WHERE id = $1`,
+      `SELECT 
+         ST_AsBinary(geometry) as geometry_wkb,
+         ST_AsBinary("centerPoint") as center_point_wkb,
+         "calculatedArea"
+       FROM land_records 
+       WHERE id = $1`,
       [id],
     );
 
-    if (geometryResult.length > 0 && geometryResult[0].geometry_wkb) {
-      try {
-        // Convert WKB back to GeoJSON
-        const geometry = wkx.Geometry.parse(geometryResult[0].geometry_wkb);
-        const geoJSON = geometry.toGeoJSON();
+    if (geometryResult.length > 0) {
+      const result = geometryResult[0];
+      let geometryGeoJSON = null;
+      let centerPointGeoJSON = null;
 
+      try {
+        // Convert main geometry WKB back to GeoJSON
+        if (result.geometry_wkb) {
+          const geometry = wkx.Geometry.parse(result.geometry_wkb);
+          geometryGeoJSON = geometry.toGeoJSON();
+        }
+
+        // Convert center point WKB back to GeoJSON
+        if (result.center_point_wkb) {
+          const centerGeometry = wkx.Geometry.parse(result.center_point_wkb);
+          centerPointGeoJSON = centerGeometry.toGeoJSON();
+        }
+
+        // Return land record with geometry data included
         return {
           ...landRecord,
-          geoJsonGeometry: geoJSON,
+          geometry: geometryGeoJSON, // Override null with GeoJSON
+          centerPoint: centerPointGeoJSON, // Override null with GeoJSON
+          calculatedArea: result.calculatedArea
+            ? parseFloat(result.calculatedArea)
+            : landRecord.calculatedArea,
+          // Also provide in additional fields for clarity
+          geoJsonGeometry: geometryGeoJSON,
+          centerPointGeoJSON: centerPointGeoJSON,
         };
       } catch (error) {
         this.logger.error('Error converting WKB to GeoJSON:', error);

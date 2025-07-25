@@ -80,14 +80,6 @@ export class LandRecord {
   @Column('decimal', { precision: 12, scale: 6, nullable: true })
   calculatedArea: number; // Area calculated from PostGIS geometry
 
-  // Legacy coordinates field for backward compatibility
-  @Column('jsonb', { nullable: true })
-  coordinates: {
-    latitude: number;
-    longitude: number;
-    boundaries: Array<{ lat: number; lng: number }>;
-  };
-
   @Column('text', { nullable: true })
   documents: string; // JSON array of document URLs
 
@@ -119,5 +111,3 @@ export class LandRecord {
   taxes: LandTax[];
   ownerId: string;
 }
-
-

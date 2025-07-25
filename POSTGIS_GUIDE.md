@@ -8,10 +8,11 @@ This guide explains how to use the PostGIS spatial features integrated into the 
 
 ### 1. Spatial Data Storage
 
-- **Geometry Column**: Stores land parcel boundaries as PostGIS Polygon geometry
+- **Geometry Column**: Stores land parcel boundaries as PostGIS Polygon geometry in WKB format
 - **Center Point**: Automatically calculated center point of each land parcel
-- **Area Calculation**: Precise area calculation using PostGIS functions
-- **WKB Format**: Uses Well-Known Binary format for efficient storage
+- **Area Calculation**: Precise area calculation using PostGIS ST_Area function
+- **WKX Integration**: Uses WKX package for GeoJSON ↔ WKB conversions
+- **SRID 4326**: Uses WGS84 coordinate reference system for geographic data
 
 ### 2. API Endpoints
 

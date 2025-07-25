@@ -77,50 +77,27 @@ export class CreateLandRecordDto {
   @Min(0)
   governmentValue?: number;
 
+  @ApiProperty({ example: '["doc1.pdf", "doc2.pdf"]', required: false })
+  @IsOptional()
+  @IsString()
+  documents?: string;
+
   @ApiProperty({
     example: {
-      latitude: -1.944,
-      longitude: 30.056,
-      boundaries: [
-        { lat: -1.944, lng: 30.056 },
-        { lat: -1.945, lng: 30.057 },
-        { lat: -1.946, lng: 30.057 },
-        { lat: -1.946, lng: 30.056 },
+      type: 'Polygon',
+      coordinates: [
+        [
+          [30.0, -1.9],
+          [30.1, -1.9],
+          [30.1, -1.95],
+          [30.0, -1.95],
+          [30.0, -1.9],
+        ],
       ],
     },
     required: false,
   })
   @IsOptional()
   @IsObject()
-  coordinates?: {
-    latitude: number;
-    longitude: number;
-    boundaries: Array<{ lat: number; lng: number }>;
-  };
-
-  @ApiProperty({ example: '["doc1.pdf", "doc2.pdf"]', required: false })
-  @IsOptional()
-  @IsString()
-  documents?: string;
-
-
-@ApiProperty({
-  example: {
-    type: 'Polygon',
-    coordinates: [
-      [
-        [30.0, -1.9],
-        [30.1, -1.9],
-        [30.1, -1.95],
-        [30.0, -1.95],
-        [30.0, -1.9],
-      ],
-    ],
-  },
-  required: false,
-})
-@IsOptional()
-@IsObject()
-geometry?: Polygon;
-
+  geometry?: Polygon;
 }

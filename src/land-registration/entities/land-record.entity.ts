@@ -61,12 +61,15 @@ export class LandRecord {
   @Column('decimal', { precision: 15, scale: 2, nullable: true })
   governmentValue: number;
 
-  @Column('jsonb', { nullable: true })
-  coordinates: {
-    latitude: number;
-    longitude: number;
-    boundaries: Array<{ lat: number; lng: number }>;
-  };
+  // PostGIS geometry columns for spatial data
+  @Column('bytea', { nullable: true })
+  geometry: Buffer; // WKB format for polygon geometry
+
+  @Column('bytea', { nullable: true })
+  centerPoint: Buffer; // WKB format for center point
+
+  @Column('decimal', { precision: 15, scale: 6, nullable: true })
+  calculatedArea: number; // Area calculated by PostGIS
 
   @Column('text', { nullable: true })
   documents: string; // JSON array of document URLs

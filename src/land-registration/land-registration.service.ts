@@ -45,14 +45,85 @@ export class LandRegistrationService {
       throw new ForbiddenException('UPI number already exists');
     }
 
+    // Process spatial data if geometry is provided
+    let geometryBuffer: Buffer | null = null;
+    let centerPointBuffer: Buffer | null = null;
+
+    if (createLandRecordDto.geometry) {
+      try {
+        // Convert GeoJSON to WKB using WKX
+        const polygon = wkx.Geometry.parseGeoJSON(createLandRecordDto.geometry);
+        geometryBuffer = polygon.toWkb();
+
+        // Calculate center point if it's a polygon
+        if (createLandRecordDto.geometry.type === 'Polygon') {
+          const coordinates = (createLandRecordDto.geometry as Polygon).coordinates[0];
+          
+          // Simple centroid calculation
+          let centerLat = 0;
+          let centerLng = 0;
+          const numPoints = coordinates.length - 1; // Exclude the last point (same as first)
+          
+          for (let i = 0; i < numPoints; i++) {
+            centerLng += coordinates[i][0];
+            centerLat += coordinates[i][1];
+          }
+          
+          centerLng /= numPoints;
+          centerLat /= numPoints;
+
+          const centerPoint: Point = {
+            type: 'Point',
+            coordinates: [centerLng, centerLat],
+          };
+
+          const centerGeometry = wkx.Geometry.parseGeoJSON(centerPoint);
+          centerPointBuffer = centerGeometry.toWkb();
+        }
+
+        this.logger.log(`Processed spatial data for parcel ${createLandRecordDto.parcelNumber}`);
+      } catch (error) {
+        this.logger.error('Failed to process spatial data:', error);
+        throw new BadRequestException('Invalid geometry data provided');
+      }
+    }
+
     const landRecord = this.landRecordRepository.create({
       ...createLandRecordDto,
       owner,
       status: LandStatus.PENDING,
       registeredBy: owner.id,
+      geometry: geometryBuffer,
+      centerPoint: centerPointBuffer,
     });
 
     const savedRecord = await this.landRecordRepository.save(landRecord);
+
+    // Calculate area using PostGIS if geometry was provided
+    if (geometryBuffer) {
+      try {
+        await this.landRecordRepository
+          .createQueryBuilder()
+          .update(LandRecord)
+          .set({
+            calculatedArea: () => 'ST_Area(ST_GeomFromWKB(geometry))',
+          })
+          .where('id = :id', { id: savedRecord.id })
+          .execute();
+
+        // Get the updated record with calculated area
+        const updatedRecord = await this.landRecordRepository.findOne({
+          where: { id: savedRecord.id },
+          relations: ['owner'],
+        });
+
+        this.logger.log(`Calculated area for parcel ${createLandRecordDto.parcelNumber}: ${updatedRecord?.calculatedArea} sq meters`);
+        return updatedRecord || savedRecord;
+      } catch (error) {
+        this.logger.error('Failed to calculate area using PostGIS:', error);
+        return savedRecord;
+      }
+    }
 
     return savedRecord;
   }
@@ -199,5 +270,33 @@ export class LandRegistrationService {
       where: { district },
       relations: ['owner'],
     });
+  }
+
+  // Helper method to convert WKB geometry back to GeoJSON
+  private convertWkbToGeoJSON(wkbBuffer: Buffer): any {
+    try {
+      const geometry = wkx.Geometry.parse(wkbBuffer);
+      return geometry.toGeoJSON();
+    } catch (error) {
+      this.logger.error('Failed to convert WKB to GeoJSON:', error);
+      return null;
+    }
+  }
+
+  // Enhanced findOne that includes geometry as GeoJSON
+  async findOneWithGeometry(id: string, user: User): Promise<LandRecord & { geoJsonGeometry?: any; geoJsonCenterPoint?: any }> {
+    const landRecord = await this.findOne(id, user);
+    
+    const result: any = { ...landRecord };
+    
+    if (landRecord.geometry) {
+      result.geoJsonGeometry = this.convertWkbToGeoJSON(landRecord.geometry);
+    }
+    
+    if (landRecord.centerPoint) {
+      result.geoJsonCenterPoint = this.convertWkbToGeoJSON(landRecord.centerPoint);
+    }
+    
+    return result;
   }
 }

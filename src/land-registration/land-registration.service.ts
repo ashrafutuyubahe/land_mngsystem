@@ -57,18 +57,19 @@ export class LandRegistrationService {
 
         // Calculate center point if it's a polygon
         if (createLandRecordDto.geometry.type === 'Polygon') {
-          const coordinates = (createLandRecordDto.geometry as Polygon).coordinates[0];
-          
+          const coordinates = (createLandRecordDto.geometry as Polygon)
+            .coordinates[0];
+
           // Simple centroid calculation
           let centerLat = 0;
           let centerLng = 0;
           const numPoints = coordinates.length - 1; // Exclude the last point (same as first)
-          
+
           for (let i = 0; i < numPoints; i++) {
             centerLng += coordinates[i][0];
             centerLat += coordinates[i][1];
           }
-          
+
           centerLng /= numPoints;
           centerLat /= numPoints;
 
@@ -81,7 +82,9 @@ export class LandRegistrationService {
           centerPointBuffer = centerGeometry.toWkb();
         }
 
-        this.logger.log(`Processed spatial data for parcel ${createLandRecordDto.parcelNumber}`);
+        this.logger.log(
+          `Processed spatial data for parcel ${createLandRecordDto.parcelNumber}`,
+        );
       } catch (error) {
         this.logger.error('Failed to process spatial data:', error);
         throw new BadRequestException('Invalid geometry data provided');
@@ -117,7 +120,9 @@ export class LandRegistrationService {
           relations: ['owner'],
         });
 
-        this.logger.log(`Calculated area for parcel ${createLandRecordDto.parcelNumber}: ${updatedRecord?.calculatedArea} sq meters`);
+        this.logger.log(
+          `Calculated area for parcel ${createLandRecordDto.parcelNumber}: ${updatedRecord?.calculatedArea} sq meters`,
+        );
         return updatedRecord || savedRecord;
       } catch (error) {
         this.logger.error('Failed to calculate area using PostGIS:', error);
@@ -284,19 +289,24 @@ export class LandRegistrationService {
   }
 
   // Enhanced findOne that includes geometry as GeoJSON
-  async findOneWithGeometry(id: string, user: User): Promise<LandRecord & { geoJsonGeometry?: any; geoJsonCenterPoint?: any }> {
+  async findOneWithGeometry(
+    id: string,
+    user: User,
+  ): Promise<LandRecord & { geoJsonGeometry?: any; geoJsonCenterPoint?: any }> {
     const landRecord = await this.findOne(id, user);
-    
+
     const result: any = { ...landRecord };
-    
+
     if (landRecord.geometry) {
       result.geoJsonGeometry = this.convertWkbToGeoJSON(landRecord.geometry);
     }
-    
+
     if (landRecord.centerPoint) {
-      result.geoJsonCenterPoint = this.convertWkbToGeoJSON(landRecord.centerPoint);
+      result.geoJsonCenterPoint = this.convertWkbToGeoJSON(
+        landRecord.centerPoint,
+      );
     }
-    
+
     return result;
   }
 }

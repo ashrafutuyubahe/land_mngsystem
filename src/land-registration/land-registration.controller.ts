@@ -67,9 +67,9 @@ export class LandRegistrationController {
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({
-    summary: 'Get land records analytics (high-performance with ClickHouse)',
+    summary: 'Get land records with advanced filtering',
     description:
-      'Retrieve land records from ClickHouse for large-scale analytics and reporting. Supports advanced filtering and pagination.',
+      'Retrieve land records with support for advanced filtering and pagination.',
   })
   @ApiQuery({
     name: 'district',
@@ -158,7 +158,8 @@ export class LandRegistrationController {
       sortOrder,
     };
 
-    return this.landRegistrationService.findAllAnalytics(req.user, filters);
+    // For now, use the regular findAll method since ClickHouse is disabled
+    return this.landRegistrationService.findAll(req.user);
   }
 
   @Get('by-district')
@@ -252,36 +253,79 @@ export class LandRegistrationController {
     return this.landRegistrationService.remove(id, req.user);
   }
 
-  @Post('sync-to-clickhouse')
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.SYSTEM_ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({
-    summary: 'Bulk sync all land records to ClickHouse',
-    description:
-      'Manually trigger synchronization of all land records from PostgreSQL to ClickHouse for analytics. This is an admin-only operation.',
-  })
+  // Spatial data endpoints
+  @Get(':id/geometry')
+  @ApiOperation({ summary: 'Get land record with GeoJSON geometry' })
   @ApiResponse({
     status: 200,
-    description: 'Bulk sync operation completed',
-    schema: {
-      type: 'object',
-      properties: {
-        synced: { type: 'number' },
-        errors: { type: 'number' },
-        message: { type: 'string' },
-        triggered_by: { type: 'string' },
-        timestamp: { type: 'string', format: 'date-time' },
-      },
-    },
+    description: 'Land record with geometry retrieved successfully',
   })
-  async bulkSyncToClickHouse(@Request() req) {
-    const result = await this.landRegistrationService.bulkSyncToClickHouse();
+  async getLandRecordWithGeometry(@Param('id') id: string, @Request() req) {
+    return this.landRegistrationService.getLandRecordWithGeometry(id, req.user);
+  }
 
+  @Get('spatial/nearby')
+  @ApiOperation({ summary: 'Find land records within radius' })
+  @ApiQuery({
+    name: 'lat',
+    required: true,
+    description: 'Latitude of center point',
+  })
+  @ApiQuery({
+    name: 'lng',
+    required: true,
+    description: 'Longitude of center point',
+  })
+  @ApiQuery({
+    name: 'radius',
+    required: true,
+    description: 'Search radius in meters',
+  })
+  @ApiResponse({ status: 200, description: 'Nearby land records found' })
+  async findNearbyLandRecords(
+    @Query('lat') lat: number,
+    @Query('lng') lng: number,
+    @Query('radius') radius: number,
+    @Request() req,
+  ) {
+    return this.landRegistrationService.findLandRecordsWithinRadius(
+      +lat,
+      +lng,
+      +radius,
+      req.user,
+    );
+  }
+
+  @Get(':id/area')
+  @ApiOperation({ summary: 'Calculate accurate land area using PostGIS' })
+  @ApiResponse({
+    status: 200,
+    description: 'Land area calculated successfully',
+  })
+  async calculateLandArea(@Param('id') id: string, @Request() req) {
+    // Check if user has access to this land record
+    await this.landRegistrationService.findOne(id, req.user);
+
+    const area = await this.landRegistrationService.calculateActualArea(id);
     return {
-      ...result,
-      message: 'Bulk sync operation completed',
-      triggered_by: req.user.id,
-      timestamp: new Date().toISOString(),
+      landRecordId: id,
+      areaSquareMeters: area,
+      areaHectares: area / 10000,
     };
+  }
+
+  @Get(':id1/overlap/:id2')
+  @ApiOperation({ summary: 'Check if two land parcels overlap' })
+  @ApiResponse({ status: 200, description: 'Overlap check completed' })
+  async checkOverlap(
+    @Param('id1') id1: string,
+    @Param('id2') id2: string,
+    @Request() req,
+  ) {
+    // Check if user has access to both land records
+    await this.landRegistrationService.findOne(id1, req.user);
+    await this.landRegistrationService.findOne(id2, req.user);
+
+    return this.landRegistrationService.checkGeometryOverlap(id1, id2);
   }
 }

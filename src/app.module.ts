@@ -27,7 +27,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: configService.get('NODE_ENV') === 'development',
+        synchronize: configService.get('NODE_ENV') === 'development', // Re-enabled after cleanup
         logging: configService.get('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],

@@ -1,5 +1,6 @@
 export enum ConstructionType {
   RESIDENTIAL = 'residential',
+  RESIDENTIAL_HOUSE = 'residential_house',
   COMMERCIAL = 'commercial',
   INDUSTRIAL = 'industrial',
   INSTITUTIONAL = 'institutional',

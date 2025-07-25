@@ -1,3 +1,4 @@
+import { Geometry } from 'geojson';
 import {
   Entity,
   Column,
@@ -61,6 +62,25 @@ export class LandRecord {
   @Column('decimal', { precision: 15, scale: 2, nullable: true })
   governmentValue: number;
 
+  // PostGIS Spatial Data Fields
+  @Column('geometry', {
+    spatialFeatureType: 'Polygon',
+    srid: 4326,
+    nullable: true,
+  })
+  geometry: Buffer; // WKB (Well-Known Binary) format for PostGIS
+
+  @Column('geometry', {
+    spatialFeatureType: 'Point',
+    srid: 4326,
+    nullable: true,
+  })
+  centerPoint: Buffer; // Center point of the land parcel
+
+  @Column('decimal', { precision: 12, scale: 6, nullable: true })
+  calculatedArea: number; // Area calculated from PostGIS geometry
+
+  // Legacy coordinates field for backward compatibility
   @Column('jsonb', { nullable: true })
   coordinates: {
     latitude: number;
@@ -99,3 +119,5 @@ export class LandRecord {
   taxes: LandTax[];
   ownerId: string;
 }
+
+

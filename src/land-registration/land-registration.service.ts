@@ -3,19 +3,18 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as wkx from 'wkx';
+import { Polygon, Point } from 'geojson';
 import { LandRecord } from './entities/land-record.entity';
 import { CreateLandRecordDto } from './dto/create-land-record.dto';
 import { UpdateLandRecordDto } from './dto/update-land-record.dto';
 import { User } from '../auth/entities/user.entity';
 import { LandStatus } from '../common/enums/status.enum';
 import { UserRole } from '../auth/enums/user-role.enum';
-import {
-  ClickHouseService,
-  LandRecordAnalytics,
-} from '../clickhouse/clickhouse.service';
 
 @Injectable()
 export class LandRegistrationService {
@@ -24,14 +23,12 @@ export class LandRegistrationService {
   constructor(
     @InjectRepository(LandRecord)
     private landRecordRepository: Repository<LandRecord>,
-    private readonly clickHouseService: ClickHouseService,
   ) {}
 
   async create(
     createLandRecordDto: CreateLandRecordDto,
     owner: User,
   ): Promise<LandRecord> {
-    // Check if parcel number already exists
     const existingParcel = await this.landRecordRepository.findOne({
       where: { parcelNumber: createLandRecordDto.parcelNumber },
     });
@@ -39,7 +36,6 @@ export class LandRegistrationService {
       throw new ForbiddenException('Parcel number already exists');
     }
 
-    // Check if UPI number already exists
     const existingUpi = await this.landRecordRepository.findOne({
       where: { upiNumber: createLandRecordDto.upiNumber },
     });
@@ -47,8 +43,56 @@ export class LandRegistrationService {
       throw new ForbiddenException('UPI number already exists');
     }
 
+    // Process spatial data using WKX for PostGIS
+    let processedGeometry: Buffer | null = null;
+    let processedCenterPoint: Buffer | null = null;
+    let calculatedArea: number | null = null;
+
+    if (createLandRecordDto.geometry) {
+      try {
+        // Validate GeoJSON geometry
+        if (createLandRecordDto.geometry.type !== 'Polygon') {
+          throw new BadRequestException('Geometry must be a Polygon');
+        }
+
+        if (
+          !createLandRecordDto.geometry.coordinates ||
+          createLandRecordDto.geometry.coordinates.length === 0
+        ) {
+          throw new BadRequestException('Geometry coordinates are required');
+        }
+
+        // Convert GeoJSON Polygon to WKB using wkx
+        const polygon = wkx.Geometry.parseGeoJSON(createLandRecordDto.geometry);
+        processedGeometry = polygon.toWkb();
+
+        // Calculate center point from polygon
+        const centerPoint = this.calculateCenterPoint(
+          createLandRecordDto.geometry,
+        );
+        const pointGeometry = wkx.Geometry.parseGeoJSON(centerPoint);
+        processedCenterPoint = pointGeometry.toWkb();
+
+        // Note: Area will be calculated using PostGIS ST_Area after saving
+        // This ensures accurate area calculation in square meters
+        calculatedArea = null; // Will be updated after database insert
+
+        this.logger.log(
+          `Processed geometry for parcel ${createLandRecordDto.parcelNumber}, WKB length: ${processedGeometry.length} bytes`,
+        );
+      } catch (error) {
+        this.logger.error('Error processing geometry:', error);
+        throw new BadRequestException(
+          'Invalid geometry data: ' + error.message,
+        );
+      }
+    }
+
     const landRecord = this.landRecordRepository.create({
       ...createLandRecordDto,
+      geometry: null, // Will be set via raw SQL
+      centerPoint: null, // Will be set via raw SQL
+      calculatedArea,
       owner,
       status: LandStatus.PENDING,
       registeredBy: owner.id,
@@ -56,10 +100,45 @@ export class LandRegistrationService {
 
     const savedRecord = await this.landRecordRepository.save(landRecord);
 
-    // Sync to ClickHouse for analytics (async, don't block the response)
-    this.syncToClickHouse(savedRecord).catch((error) => {
-      this.logger.error('Failed to sync land record to ClickHouse:', error);
-    });
+    // Update geometry fields using raw SQL to handle WKB properly
+    if (processedGeometry) {
+      await this.landRecordRepository.query(
+        `UPDATE land_records SET 
+         geometry = ST_SetSRID($1::geometry, 4326),
+         "centerPoint" = ST_SetSRID($2::geometry, 4326)
+         WHERE id = $3`,
+        [processedGeometry, processedCenterPoint, savedRecord.id],
+      );
+    }
+
+    // Calculate accurate area using PostGIS ST_Area if geometry exists
+    if (processedGeometry) {
+      try {
+        const accurateArea = await this.calculateActualArea(savedRecord.id);
+        if (accurateArea > 0) {
+          await this.landRecordRepository.query(
+            `UPDATE land_records SET "calculatedArea" = $1 WHERE id = $2`,
+            [accurateArea, savedRecord.id],
+          );
+          savedRecord.calculatedArea = accurateArea;
+          this.logger.log(
+            `Updated area for parcel ${savedRecord.parcelNumber} with PostGIS calculation: ${accurateArea} sqm`,
+          );
+        }
+      } catch (error) {
+        this.logger.warn(
+          'Could not calculate accurate area using PostGIS:',
+          error.message,
+        );
+      }
+    }
+
+    this.logger.log(`Created land record ${savedRecord.id} with spatial data`);
+
+    // Return the record with geometry data converted to GeoJSON for the response
+    if (processedGeometry) {
+      return await this.getLandRecordWithGeometry(savedRecord.id, owner);
+    }
 
     return savedRecord;
   }
@@ -69,15 +148,11 @@ export class LandRegistrationService {
       .createQueryBuilder('land')
       .leftJoinAndSelect('land.owner', 'owner');
 
-    // Citizens can only see their own land records
     if (user.role === UserRole.CITIZEN) {
       query.where('land.owner.id = :userId', { userId: user.id });
-    }
-    // Land officers can see all records in their district
-    else if (user.role === UserRole.LAND_OFFICER) {
+    } else if (user.role === UserRole.LAND_OFFICER) {
       query.where('land.district = :district', { district: user.district });
     }
-    // Admins can see all records
 
     return query.getMany();
   }
@@ -92,7 +167,6 @@ export class LandRegistrationService {
       throw new NotFoundException('Land record not found');
     }
 
-    // Check access permissions
     if (user.role === UserRole.CITIZEN && landRecord.owner.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
@@ -114,7 +188,6 @@ export class LandRegistrationService {
   ): Promise<LandRecord> {
     const landRecord = await this.findOne(id, user);
 
-    // Only allow updates if pending or by authorized personnel
     if (
       landRecord.status !== LandStatus.PENDING &&
       user.role === UserRole.CITIZEN
@@ -201,186 +274,139 @@ export class LandRegistrationService {
     });
   }
 
-  // ClickHouse Analytics Integration
-  private async syncToClickHouse(landRecord: LandRecord): Promise<void> {
-    try {
-      const analyticsRecord: LandRecordAnalytics = {
-        id: landRecord.id,
-        parcel_number: landRecord.parcelNumber,
-        upi_number: landRecord.upiNumber,
-        land_use: landRecord.landUseType,
-        area: landRecord.area,
-        district: landRecord.district,
-        sector: landRecord.sector,
-        cell: landRecord.cell,
-        village: landRecord.village,
-        status: landRecord.status,
-        owner_name: `${landRecord.owner.firstName} ${landRecord.owner.lastName}`,
-        registration_date: landRecord.createdAt,
-        created_at: landRecord.createdAt,
-        updated_at: landRecord.updatedAt,
-        lat: landRecord.coordinates?.latitude,
-        lng: landRecord.coordinates?.longitude,
-        estimated_value: landRecord.marketValue,
-        land_type: landRecord.landUseType,
-        tenure_type: 'FREEHOLD', // Default value, can be extended later
-      };
-
-      await this.clickHouseService.syncLandRecord(analyticsRecord);
-      this.logger.log(`Synced land record ${landRecord.id} to ClickHouse`);
-    } catch (error) {
-      this.logger.error(
-        `Failed to sync land record ${landRecord.id} to ClickHouse:`,
-        error,
-      );
-    }
-  }
-
-  // High-performance findAll using ClickHouse for large datasets
-  async findAllAnalytics(
-    user: User,
-    filters: {
-      district?: string;
-      landUse?: string;
-      status?: string;
-      minArea?: number;
-      maxArea?: number;
-      dateFrom?: Date;
-      dateTo?: Date;
-      page?: number;
-      limit?: number;
-      sortBy?: string;
-      sortOrder?: 'ASC' | 'DESC';
-    } = {},
-  ): Promise<{
-    data: LandRecordAnalytics[];
-    total: number;
-    page: number;
-    totalPages: number;
-    source: 'clickhouse' | 'postgres';
-  }> {
-    try {
-      // Apply user-based filtering
-      const userFilters = { ...filters };
-
-      if (user.role === UserRole.CITIZEN) {
-        // Citizens can only see their own records - we need to get from PostgreSQL
-        const records = await this.findAll(user);
-        return {
-          data: records.map((record) => this.transformToAnalytics(record)),
-          total: records.length,
-          page: filters.page || 1,
-          totalPages: 1,
-          source: 'postgres',
-        };
-      } else if (user.role === UserRole.LAND_OFFICER && user.district) {
-        userFilters.district = user.district;
-      }
-
-      // Use ClickHouse for high-performance analytics
-      const result =
-        await this.clickHouseService.getLandRecordsAnalytics(userFilters);
-
-      return {
-        ...result,
-        source: 'clickhouse',
-      };
-    } catch (error) {
-      this.logger.error(
-        'Failed to get analytics from ClickHouse, falling back to PostgreSQL:',
-        error,
-      );
-
-      // Fallback to PostgreSQL
-      const records = await this.findAll(user);
-      return {
-        data: records.map((record) => this.transformToAnalytics(record)),
-        total: records.length,
-        page: filters.page || 1,
-        totalPages: 1,
-        source: 'postgres',
-      };
-    }
-  }
-
-  private transformToAnalytics(record: LandRecord): LandRecordAnalytics {
-    return {
-      id: record.id,
-      parcel_number: record.parcelNumber,
-      upi_number: record.upiNumber,
-      land_use: record.landUseType,
-      area: record.area,
-      district: record.district,
-      sector: record.sector,
-      cell: record.cell,
-      village: record.village,
-      status: record.status,
-      owner_name: `${record.owner.firstName} ${record.owner.lastName}`,
-      registration_date: record.createdAt,
-      created_at: record.createdAt,
-      updated_at: record.updatedAt,
-      lat: record.coordinates?.latitude,
-      lng: record.coordinates?.longitude,
-      estimated_value: record.marketValue,
-      land_type: record.landUseType,
-      tenure_type: 'FREEHOLD', // Default value, can be extended later
-    };
-  }
-
-  // Bulk sync all existing records to ClickHouse
-  async bulkSyncToClickHouse(): Promise<{ synced: number; errors: number }> {
-    try {
-      this.logger.log('Starting bulk sync of land records to ClickHouse...');
-
-      const batchSize = 1000;
-      let offset = 0;
-      let synced = 0;
-      let errors = 0;
-
-      while (true) {
-        const records = await this.landRecordRepository.find({
-          relations: ['owner'],
-          take: batchSize,
-          skip: offset,
-        });
-
-        if (records.length === 0) break;
-
-        const analyticsRecords: LandRecordAnalytics[] = records.map((record) =>
-          this.transformToAnalytics(record),
-        );
-
-        try {
-          await this.clickHouseService.bulkSyncLandRecords(analyticsRecords);
-          synced += records.length;
-          this.logger.log(
-            `Synced batch of ${records.length} records (total: ${synced})`,
-          );
-        } catch (error) {
-          errors += records.length;
-          this.logger.error(
-            `Failed to sync batch starting at offset ${offset}:`,
-            error,
-          );
-        }
-
-        offset += batchSize;
-      }
-
-      this.logger.log(
-        `Bulk sync completed. Synced: ${synced}, Errors: ${errors}`,
-      );
-      return { synced, errors };
-    } catch (error) {
-      this.logger.error('Bulk sync failed:', error);
-      throw error;
-    }
-  }
-
   async findByDistrict(district: string): Promise<LandRecord[]> {
     return this.landRecordRepository.find({
       where: { district },
       relations: ['owner'],
     });
+  }
+
+  // Helper methods for spatial data processing
+  private calculateCenterPoint(polygon: Polygon): Point {
+    // Calculate centroid of polygon (simple average of coordinates)
+    const coordinates = polygon.coordinates[0]; // Get exterior ring
+    let latSum = 0;
+    let lngSum = 0;
+    const pointCount = coordinates.length - 1; // Exclude closing point
+
+    for (let i = 0; i < pointCount; i++) {
+      lngSum += coordinates[i][0];
+      latSum += coordinates[i][1];
+    }
+
+    return {
+      type: 'Point',
+      coordinates: [lngSum / pointCount, latSum / pointCount],
+    };
+  }
+
+  // PostGIS spatial query methods
+  async findLandRecordsWithinRadius(
+    centerLat: number,
+    centerLng: number,
+    radiusMeters: number,
+    user: User,
+  ): Promise<LandRecord[]> {
+    let query = `
+      SELECT lr.*, 
+             ST_Distance(
+               ST_Transform(lr."centerPoint", 3857),
+               ST_Transform(ST_GeomFromText($1, 4326), 3857)
+             ) as distance
+      FROM land_records lr
+      WHERE lr."centerPoint" IS NOT NULL
+        AND ST_DWithin(
+          ST_Transform(lr."centerPoint", 3857),
+          ST_Transform(ST_GeomFromText($1, 4326), 3857),
+          $2
+        )
+    `;
+
+    const params = [`POINT(${centerLng} ${centerLat})`, radiusMeters];
+
+    // Apply user-based filtering
+    if (user.role === UserRole.CITIZEN) {
+      query += ' AND lr."ownerId" = $3';
+      params.push(user.id);
+    } else if (user.role === UserRole.LAND_OFFICER && user.district) {
+      query += ' AND lr.district = $3';
+      params.push(user.district);
+    }
+
+    query += ' ORDER BY distance ASC';
+
+    const results = await this.landRecordRepository.query(query, params);
+    return results;
+  }
+
+  async calculateActualArea(landRecordId: string): Promise<number> {
+    // Use PostGIS to calculate accurate area
+    const query = `
+      SELECT ST_Area(ST_Transform(geometry, 3857)) as area_sqm
+      FROM land_records
+      WHERE id = $1 AND geometry IS NOT NULL
+    `;
+
+    const result = await this.landRecordRepository.query(query, [landRecordId]);
+    return result[0]?.area_sqm ? parseFloat(result[0].area_sqm) : 0;
+  }
+
+  async checkGeometryOverlap(
+    landRecordId1: string,
+    landRecordId2: string,
+  ): Promise<{
+    overlaps: boolean;
+    overlapArea?: number;
+  }> {
+    const query = `
+      SELECT 
+        ST_Overlaps(lr1.geometry, lr2.geometry) as overlaps,
+        ST_Area(ST_Transform(ST_Intersection(lr1.geometry, lr2.geometry), 3857)) as overlap_area
+      FROM land_records lr1, land_records lr2
+      WHERE lr1.id = $1 AND lr2.id = $2
+        AND lr1.geometry IS NOT NULL AND lr2.geometry IS NOT NULL
+    `;
+
+    const result = await this.landRecordRepository.query(query, [
+      landRecordId1,
+      landRecordId2,
+    ]);
+
+    if (result.length === 0) {
+      return { overlaps: false };
+    }
+
+    return {
+      overlaps: result[0].overlaps || false,
+      overlapArea: parseFloat(result[0].overlap_area) || 0,
+    };
+  }
+
+  // Method to convert WKB back to GeoJSON for API responses
+  async getLandRecordWithGeometry(id: string, user: User): Promise<any> {
+    const landRecord = await this.findOne(id, user);
+
+    // Get geometry data using raw SQL to ensure proper WKB handling
+    const geometryResult = await this.landRecordRepository.query(
+      `SELECT ST_AsBinary(geometry) as geometry_wkb FROM land_records WHERE id = $1`,
+      [id],
+    );
+
+    if (geometryResult.length > 0 && geometryResult[0].geometry_wkb) {
+      try {
+        // Convert WKB back to GeoJSON
+        const geometry = wkx.Geometry.parse(geometryResult[0].geometry_wkb);
+        const geoJSON = geometry.toGeoJSON();
+
+        return {
+          ...landRecord,
+          geoJsonGeometry: geoJSON,
+        };
+      } catch (error) {
+        this.logger.error('Error converting WKB to GeoJSON:', error);
+      }
+    }
+
+    return landRecord;
   }
 }

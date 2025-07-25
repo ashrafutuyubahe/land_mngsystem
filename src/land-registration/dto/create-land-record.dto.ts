@@ -1,3 +1,5 @@
+import { Polygon } from 'geojson';
+
 import {
   IsString,
   IsNotEmpty,
@@ -100,4 +102,25 @@ export class CreateLandRecordDto {
   @IsOptional()
   @IsString()
   documents?: string;
+
+
+@ApiProperty({
+  example: {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [30.0, -1.9],
+        [30.1, -1.9],
+        [30.1, -1.95],
+        [30.0, -1.95],
+        [30.0, -1.9],
+      ],
+    ],
+  },
+  required: false,
+})
+@IsOptional()
+@IsObject()
+geometry?: Polygon;
+
 }

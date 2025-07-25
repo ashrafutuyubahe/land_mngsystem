@@ -30,19 +30,6 @@ export enum TransferStatus {
   CANCELLED = 'cancelled',
 }
 
-export enum ConflictStatus {
-  SUBMITTED = 'submitted',
-  UNDER_INVESTIGATION = 'under_investigation',
-  MEDIATION_SCHEDULED = 'mediation_scheduled',
-  IN_MEDIATION = 'in_mediation',
-  RESOLVED = 'resolved',
-  ESCALATED = 'escalated',
-  CLOSED = 'closed',
-  REPORTED = 'REPORTED',
-  INVESTIGATING = 'INVESTIGATING',
-  MEDIATING = 'MEDIATING',
-}
-
 export enum PermitStatus {
   DRAFT = 'draft',
   SUBMITTED = 'submitted',

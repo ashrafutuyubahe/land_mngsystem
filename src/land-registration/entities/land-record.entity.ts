@@ -62,11 +62,19 @@ export class LandRecord {
   governmentValue: number;
 
   // PostGIS geometry columns for spatial data
-  @Column('bytea', { nullable: true })
-  geometry: Buffer; // WKB format for polygon geometry
+  @Column('geometry', {
+    nullable: true,
+    spatialFeatureType: 'Polygon',
+    srid: 4326,
+  })
+  geometry: string; // PostGIS geometry for polygon
 
-  @Column('bytea', { nullable: true })
-  centerPoint: Buffer; // WKB format for center point
+  @Column('geometry', {
+    nullable: true,
+    spatialFeatureType: 'Point',
+    srid: 4326,
+  })
+  centerPoint: string; // PostGIS geometry for center point
 
   @Column('decimal', { precision: 15, scale: 6, nullable: true })
   calculatedArea: number; // Area calculated by PostGIS

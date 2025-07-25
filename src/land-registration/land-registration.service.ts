@@ -7,8 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as wkx from 'wkx';
-import { Polygon, Point } from 'geojson';
 import { LandRecord } from './entities/land-record.entity';
 import { CreateLandRecordDto } from './dto/create-land-record.dto';
 import { UpdateLandRecordDto } from './dto/update-land-record.dto';
@@ -29,7 +27,6 @@ export class LandRegistrationService {
     createLandRecordDto: CreateLandRecordDto,
     owner: User,
   ): Promise<LandRecord> {
-
     const existingParcel = await this.landRecordRepository.findOne({
       where: { parcelNumber: createLandRecordDto.parcelNumber },
     });
@@ -37,7 +34,6 @@ export class LandRegistrationService {
       throw new ForbiddenException('Parcel number already exists');
     }
 
-  
     const existingUpi = await this.landRecordRepository.findOne({
       where: { upiNumber: createLandRecordDto.upiNumber },
     });
@@ -45,87 +41,49 @@ export class LandRegistrationService {
       throw new ForbiddenException('UPI number already exists');
     }
 
-    
-    let geometryBuffer: Buffer | null = null;
-    let centerPointBuffer: Buffer | null = null;
-
-    if (createLandRecordDto.geometry) {
-      try {
-        
-        const polygon = wkx.Geometry.parseGeoJSON(createLandRecordDto.geometry);
-        geometryBuffer = polygon.toWkb();
-
-     
-        if (createLandRecordDto.geometry.type === 'Polygon') {
-          const coordinates = (createLandRecordDto.geometry as Polygon)
-            .coordinates[0];
-
-          let centerLat = 0;
-          let centerLng = 0;
-          const numPoints = coordinates.length - 1;
-
-          for (let i = 0; i < numPoints; i++) {
-            centerLng += coordinates[i][0];
-            centerLat += coordinates[i][1];
-          }
-
-          centerLng /= numPoints;
-          centerLat /= numPoints;
-
-          const centerPoint: Point = {
-            type: 'Point',
-            coordinates: [centerLng, centerLat],
-          };
-
-          const centerGeometry = wkx.Geometry.parseGeoJSON(centerPoint);
-          centerPointBuffer = centerGeometry.toWkb();
-        }
-
-        this.logger.log(
-          `Processed spatial data for parcel ${createLandRecordDto.parcelNumber}`,
-        );
-      } catch (error) {
-        this.logger.error('Failed to process spatial data:', error);
-        throw new BadRequestException('Invalid geometry data provided');
-      }
-    }
+    // Process spatial data using PostGIS directly
+    const { geometry, ...landRecordData } = createLandRecordDto;
 
     const landRecord = this.landRecordRepository.create({
-      ...createLandRecordDto,
+      ...landRecordData,
       owner,
       status: LandStatus.PENDING,
       registeredBy: owner.id,
-      geometry: geometryBuffer,
-      centerPoint: centerPointBuffer,
     });
 
     const savedRecord = await this.landRecordRepository.save(landRecord);
 
-    
-    if (geometryBuffer) {
+    // If geometry is provided, update the record with PostGIS spatial data
+    if (geometry) {
       try {
+        const geoJsonString = JSON.stringify(geometry);
+
         await this.landRecordRepository
           .createQueryBuilder()
           .update(LandRecord)
           .set({
-            calculatedArea: () => 'ST_Area(ST_GeomFromWKB(geometry))',
+            geometry: () => `ST_GeomFromGeoJSON('${geoJsonString}')`,
+            centerPoint: () =>
+              `ST_Centroid(ST_GeomFromGeoJSON('${geoJsonString}'))`,
+            calculatedArea: () =>
+              `ST_Area(ST_GeomFromGeoJSON('${geoJsonString}'))`,
           })
           .where('id = :id', { id: savedRecord.id })
           .execute();
 
-        
         const updatedRecord = await this.landRecordRepository.findOne({
           where: { id: savedRecord.id },
           relations: ['owner'],
         });
 
         this.logger.log(
-          `Calculated area for parcel ${createLandRecordDto.parcelNumber}: ${updatedRecord?.calculatedArea} sq meters`,
+          `Processed spatial data for parcel ${createLandRecordDto.parcelNumber}`,
         );
+
         return updatedRecord || savedRecord;
       } catch (error) {
-        this.logger.error('Failed to calculate area using PostGIS:', error);
-        return savedRecord;
+        this.logger.error('Failed to process spatial data:', error);
+        throw new BadRequestException('Invalid geometry data provided');
       }
     }
 
@@ -276,36 +234,88 @@ export class LandRegistrationService {
     });
   }
 
-  // Helper method to convert WKB geometry back to GeoJSON
-  private convertWkbToGeoJSON(wkbBuffer: Buffer): any {
-    try {
-      const geometry = wkx.Geometry.parse(wkbBuffer);
-      return geometry.toGeoJSON();
-    } catch (error) {
-      this.logger.error('Failed to convert WKB to GeoJSON:', error);
-      return null;
-    }
-  }
-
-  // Enhanced findOne that includes geometry as GeoJSON
+  // Helper method to get geometry as GeoJSON using PostGIS
   async findOneWithGeometry(
     id: string,
     user: User,
   ): Promise<LandRecord & { geoJsonGeometry?: any; geoJsonCenterPoint?: any }> {
     const landRecord = await this.findOne(id, user);
 
+    // Get geometry data as GeoJSON using PostGIS functions
+    const geometryData = await this.landRecordRepository
+      .createQueryBuilder('land')
+      .select([
+        'ST_AsGeoJSON(land.geometry) as geometry_geojson',
+        'ST_AsGeoJSON(land.centerPoint) as center_point_geojson',
+      ])
+      .where('land.id = :id', { id })
+      .getRawOne();
+
     const result: any = { ...landRecord };
 
-    if (landRecord.geometry) {
-      result.geoJsonGeometry = this.convertWkbToGeoJSON(landRecord.geometry);
+    if (geometryData?.geometry_geojson) {
+      try {
+        result.geoJsonGeometry = JSON.parse(geometryData.geometry_geojson);
+      } catch (error) {
+        this.logger.error('Failed to parse geometry GeoJSON:', error);
+      }
     }
 
-    if (landRecord.centerPoint) {
-      result.geoJsonCenterPoint = this.convertWkbToGeoJSON(
-        landRecord.centerPoint,
-      );
+    if (geometryData?.center_point_geojson) {
+      try {
+        result.geoJsonCenterPoint = JSON.parse(
+          geometryData.center_point_geojson,
+        );
+      } catch (error) {
+        this.logger.error('Failed to parse center point GeoJSON:', error);
+      }
     }
 
     return result;
+  }
+
+  // Method to get all records with geometry as GeoJSON
+  async findAllWithGeometry(user: User): Promise<any[]> {
+    let query = this.landRecordRepository
+      .createQueryBuilder('land')
+      .leftJoinAndSelect('land.owner', 'owner')
+      .addSelect([
+        'ST_AsGeoJSON(land.geometry) as geometry_geojson',
+        'ST_AsGeoJSON(land.centerPoint) as center_point_geojson',
+      ]);
+
+    // Apply user-based filtering
+    if (user.role === UserRole.CITIZEN) {
+      query = query.where('land.owner.id = :userId', { userId: user.id });
+    } else if (user.role === UserRole.LAND_OFFICER) {
+      query = query.where('land.district = :district', {
+        district: user.district,
+      });
+    }
+
+    const results = await query.getRawAndEntities();
+
+    return results.entities.map((entity, index) => {
+      const raw = results.raw[index];
+      const result: any = { ...entity };
+
+      if (raw?.geometry_geojson) {
+        try {
+          result.geoJsonGeometry = JSON.parse(raw.geometry_geojson);
+        } catch (error) {
+          this.logger.error('Failed to parse geometry GeoJSON:', error);
+        }
+      }
+
+      if (raw?.center_point_geojson) {
+        try {
+          result.geoJsonCenterPoint = JSON.parse(raw.center_point_geojson);
+        } catch (error) {
+          this.logger.error('Failed to parse center point GeoJSON:', error);
+        }
+      }
+
+      return result;
+    });
   }
 }

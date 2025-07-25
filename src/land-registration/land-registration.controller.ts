@@ -148,5 +148,4 @@ export class LandRegistrationController {
   async remove(@Param('id') id: string, @Request() req) {
     return this.landRegistrationService.remove(id, req.user);
   }
-
 }

@@ -29,7 +29,7 @@ export class LandRegistrationService {
     createLandRecordDto: CreateLandRecordDto,
     owner: User,
   ): Promise<LandRecord> {
-    // Check if parcel number already exists
+
     const existingParcel = await this.landRecordRepository.findOne({
       where: { parcelNumber: createLandRecordDto.parcelNumber },
     });
@@ -37,7 +37,7 @@ export class LandRegistrationService {
       throw new ForbiddenException('Parcel number already exists');
     }
 
-    // Check if UPI number already exists
+  
     const existingUpi = await this.landRecordRepository.findOne({
       where: { upiNumber: createLandRecordDto.upiNumber },
     });
@@ -45,25 +45,24 @@ export class LandRegistrationService {
       throw new ForbiddenException('UPI number already exists');
     }
 
-    // Process spatial data if geometry is provided
+    
     let geometryBuffer: Buffer | null = null;
     let centerPointBuffer: Buffer | null = null;
 
     if (createLandRecordDto.geometry) {
       try {
-        // Convert GeoJSON to WKB using WKX
+        
         const polygon = wkx.Geometry.parseGeoJSON(createLandRecordDto.geometry);
         geometryBuffer = polygon.toWkb();
 
-        // Calculate center point if it's a polygon
+     
         if (createLandRecordDto.geometry.type === 'Polygon') {
           const coordinates = (createLandRecordDto.geometry as Polygon)
             .coordinates[0];
 
-          // Simple centroid calculation
           let centerLat = 0;
           let centerLng = 0;
-          const numPoints = coordinates.length - 1; // Exclude the last point (same as first)
+          const numPoints = coordinates.length - 1;
 
           for (let i = 0; i < numPoints; i++) {
             centerLng += coordinates[i][0];
@@ -102,7 +101,7 @@ export class LandRegistrationService {
 
     const savedRecord = await this.landRecordRepository.save(landRecord);
 
-    // Calculate area using PostGIS if geometry was provided
+    
     if (geometryBuffer) {
       try {
         await this.landRecordRepository
@@ -114,7 +113,7 @@ export class LandRegistrationService {
           .where('id = :id', { id: savedRecord.id })
           .execute();
 
-        // Get the updated record with calculated area
+        
         const updatedRecord = await this.landRecordRepository.findOne({
           where: { id: savedRecord.id },
           relations: ['owner'],
